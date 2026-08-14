@@ -1,3 +1,4 @@
+# Python
 .venv/
 __pycache__/
 *.py[cod]
@@ -5,7 +6,24 @@ __pycache__/
 .coverage
 htmlcov/
 
+# Environment
 .env
+.env.*
+!.env.example
+
+# Generated media
 media/
 generated/
 temp/
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/dist/
+frontend/coverage/
+frontend/*.tsbuildinfo
+
+# Local tooling
+.DS_Store
+Thumbs.db
