@@ -1,0 +1,157 @@
+{
+  "$defs": {
+    "MotionLevel": {
+      "enum": [
+        "none",
+        "low",
+        "medium",
+        "high"
+      ],
+      "title": "MotionLevel",
+      "type": "string"
+    },
+    "NormalizedBoundingBox": {
+      "additionalProperties": false,
+      "description": "Bounding box coordinates expressed from 0.0 to 1.0.",
+      "properties": {
+        "x_min": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "X Min",
+          "type": "number"
+        },
+        "y_min": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Y Min",
+          "type": "number"
+        },
+        "x_max": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "X Max",
+          "type": "number"
+        },
+        "y_max": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Y Max",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x_min",
+        "y_min",
+        "x_max",
+        "y_max"
+      ],
+      "title": "NormalizedBoundingBox",
+      "type": "object"
+    },
+    "ObjectCategory": {
+      "enum": [
+        "person",
+        "animal",
+        "toy",
+        "food",
+        "vehicle",
+        "environment",
+        "other"
+      ],
+      "title": "ObjectCategory",
+      "type": "string"
+    },
+    "SceneEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "event_id": {
+          "maxLength": 50,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]*$",
+          "title": "Event Id",
+          "type": "string"
+        },
+        "timestamp_ms": {
+          "minimum": 0,
+          "title": "Timestamp Ms",
+          "type": "integer"
+        },
+        "object_label": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Object Label",
+          "type": "string"
+        },
+        "category": {
+          "$ref": "#/$defs/ObjectCategory"
+        },
+        "bounding_box": {
+          "$ref": "#/$defs/NormalizedBoundingBox"
+        },
+        "confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "visible_evidence": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Visible Evidence",
+          "type": "string"
+        },
+        "motion_level": {
+          "$ref": "#/$defs/MotionLevel"
+        }
+      },
+      "required": [
+        "event_id",
+        "timestamp_ms",
+        "object_label",
+        "category",
+        "bounding_box",
+        "confidence",
+        "visible_evidence",
+        "motion_level"
+      ],
+      "title": "SceneEvent",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "analysis_version": {
+      "const": "1.0",
+      "title": "Analysis Version",
+      "type": "string"
+    },
+    "duration_ms": {
+      "exclusiveMinimum": 0,
+      "maximum": 15000,
+      "title": "Duration Ms",
+      "type": "integer"
+    },
+    "events": {
+      "items": {
+        "$ref": "#/$defs/SceneEvent"
+      },
+      "maxItems": 12,
+      "title": "Events",
+      "type": "array"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 10,
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "analysis_version",
+    "duration_ms"
+  ],
+  "title": "SceneAnalysisResponse",
+  "type": "object"
+}
