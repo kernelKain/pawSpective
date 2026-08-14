@@ -1,5 +1,6 @@
 "use client";
 
+import { LiveDogLens } from "./components/LiveDogLens";
 import {
   ChangeEvent,
   FormEvent,
@@ -168,6 +169,8 @@ export function PawSpectiveShell({
   }
 
   function beginMockAnalysis() {
+    setEvents(initialEvents);
+    setSelectedEventId(initialEvents[0]?.event_id ?? "");
     setStage("processing");
 
     if (analysisTimer.current) {
@@ -222,7 +225,7 @@ export function PawSpectiveShell({
         </button>
 
         <div className="topbar-actions">
-          <span className="phase-badge">Phase 1 · Mock experience</span>
+          <span className="phase-badge">Phase 2 · Live Dog Lens</span>
 
           <button
             className="text-button"
@@ -447,50 +450,10 @@ export function PawSpectiveShell({
           </div>
 
           <div className="lens-layout">
-            <div className="camera-card">
-              <div className="camera-labels">
-                <span>Mock camera</span>
-                <span>Research-grounded approximation</span>
-              </div>
-
-              <div className="mock-camera">
-                <div className="human-scene">
-                  <div className="sun" />
-                  <div className="tree tree-one" />
-                  <div className="tree tree-two" />
-                  <div className="ball red-ball" />
-                  <div className="ball blue-ball" />
-                  <div className="dog-subject">🐕</div>
-                </div>
-
-                <div
-                  className="dog-vision-layer"
-                  style={{ opacity: visionMix / 100 }}
-                />
-
-                <div className="alignment-guide">
-                  <span>+</span>
-                  <small>Approximate head-facing direction</small>
-                </div>
-              </div>
-
-              <div className="comparison-control">
-                <strong>Human view</strong>
-
-                <input
-                  aria-label="Human and dog vision comparison"
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={visionMix}
-                  onChange={(event) =>
-                    setVisionMix(Number(event.target.value))
-                  }
-                />
-
-                <strong>Dog Vision</strong>
-              </div>
-            </div>
+            <LiveDogLens
+              visionMix={visionMix}
+              onVisionMixChange={setVisionMix}
+            />
 
             <aside className="lens-sidebar">
               <div className="profile-summary">
@@ -537,16 +500,17 @@ export function PawSpectiveShell({
               </div>
 
               <div className="mock-notice">
-                Camera access arrives in Phase 2. This scene proves the
-                Phase 1 interaction flow.
+                The camera and Dog Vision filter are live. Object
+                analysis and story generation remain Phase 1 mocks until
+                Phase 3.
               </div>
 
               <button
-                className="primary-button"
+                className="button button-primary button-full"
                 type="button"
                 onClick={beginMockAnalysis}
               >
-                Record mock moment <span>●</span>
+                Continue to mock analysis
               </button>
             </aside>
           </div>
