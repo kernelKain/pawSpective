@@ -506,7 +506,7 @@ export function PawSpectiveShell({
               </div>
 
               <button
-                className="button button-primary button-full"
+                className="primary-button"
                 type="button"
                 onClick={beginMockAnalysis}
               >

@@ -33,7 +33,7 @@ type UseCameraResult = {
   stopCamera: () => void;
 };
 
-function describeCameraError(error: unknown): CameraError {
+export function describeCameraError(error: unknown): CameraError {
   if (!(error instanceof DOMException)) {
     return {
       status: "error",

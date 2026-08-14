@@ -80,18 +80,24 @@ export function LiveDogLens({
   }, [status, videoRef]);
 
   useEffect(() => {
-    rendererRef.current?.setMix(visionMix / 100);
-  }, [visionMix]);
+    if (status === "ready") {
+      rendererRef.current?.setMix(visionMix / 100);
+    }
+  }, [status, visionMix]);
 
   useEffect(() => {
-    rendererRef.current?.setDetailReduction(
-      detailReduction / 100,
-    );
-  }, [detailReduction]);
+    if (status === "ready") {
+      rendererRef.current?.setDetailReduction(
+        detailReduction / 100,
+      );
+    }
+  }, [status, detailReduction]);
 
   useEffect(() => {
-    rendererRef.current?.setMirror(facingMode === "user");
-  }, [facingMode]);
+    if (status === "ready") {
+      rendererRef.current?.setMirror(facingMode === "user");
+    }
+  }, [status, facingMode]);
 
   const cameraMessage =
     status === "requesting"
@@ -165,7 +171,7 @@ export function LiveDogLens({
             </p>
 
             <button
-              className="button button-primary"
+              className="primary-button"
               type="button"
               disabled={status === "requesting"}
               onClick={handleStartCamera}
@@ -198,10 +204,8 @@ export function LiveDogLens({
             </div>
 
             <div className="alignment-guide" aria-hidden="true">
-              <span />
-              <span />
-              <span />
-              <span />
+              <span>+</span>
+              <small>Approximate head-facing direction</small>
             </div>
           </>
         )}
@@ -212,7 +216,7 @@ export function LiveDogLens({
             <p className="camera-error">{rendererError}</p>
 
             <button
-              className="button button-secondary"
+              className="secondary-button"
               type="button"
               onClick={handleStopCamera}
             >
