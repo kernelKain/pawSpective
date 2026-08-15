@@ -1,36 +1,17 @@
 "use client";
 
 import { LiveDogLens } from "./components/LiveDogLens";
+import type {
+  CapturedClip,
+  SceneEvent,
+} from "./types/sceneAnalysis";
 import {
   ChangeEvent,
   FormEvent,
-  useMemo,
-  useRef,
   useState,
 } from "react";
 
-export type SceneEvent = {
-  event_id: string;
-  timestamp_ms: number;
-  object_label: string;
-  category:
-    | "person"
-    | "animal"
-    | "toy"
-    | "food"
-    | "vehicle"
-    | "environment"
-    | "other";
-  bounding_box: {
-    x_min: number;
-    y_min: number;
-    x_max: number;
-    y_max: number;
-  };
-  confidence: number;
-  visible_evidence: string;
-  motion_level: "none" | "low" | "medium" | "high";
-};
+import { analyzeCapturedClip } from "./lib/sceneAnalysisApi";
 
 type Profile = {
   ownerName: string;
@@ -86,14 +67,6 @@ function formatTimestamp(timestampMs: number) {
   return `${(timestampMs / 1000).toFixed(1)}s`;
 }
 
-function visibilityScore(event?: SceneEvent) {
-  if (!event) return 0;
-  if (event.object_label.toLowerCase().includes("blue")) return 89;
-  if (event.category === "toy") return 76;
-  if (event.motion_level === "high") return 72;
-  return 61;
-}
-
 export function PawSpectiveShell({
   initialEvents,
 }: {
@@ -107,14 +80,12 @@ export function PawSpectiveShell({
     initialEvents[0]?.event_id ?? "",
   );
   const [accuracyOpen, setAccuracyOpen] = useState(false);
-  const analysisTimer = useRef<number | null>(null);
-
-  const selectedEvent = useMemo(
-    () => events.find((event) => event.event_id === selectedEventId),
-    [events, selectedEventId],
-  );
-
-  const score = visibilityScore(selectedEvent);
+  const [capturedClip, setCapturedClip] =
+    useState<CapturedClip | null>(null);
+  const [analysisError, setAnalysisError] =
+    useState<string | null>(null);
+  const [analysisSource, setAnalysisSource] =
+    useState<"gemini" | "demo" | null>(null);
 
   function updateProfile<K extends keyof Profile>(
     key: K,
@@ -168,18 +139,30 @@ export function PawSpectiveShell({
     setStage("lens");
   }
 
-  function beginMockAnalysis() {
-    setEvents(initialEvents);
-    setSelectedEventId(initialEvents[0]?.event_id ?? "");
+  async function beginSceneAnalysis() {
+    if (!capturedClip) return;
+
+    setAnalysisError(null);
+    setAnalysisSource(null);
     setStage("processing");
 
-    if (analysisTimer.current) {
-      window.clearTimeout(analysisTimer.current);
-    }
+    try {
+      const response = await analyzeCapturedClip(capturedClip);
 
-    analysisTimer.current = window.setTimeout(() => {
+      setEvents(response.analysis.events);
+      setSelectedEventId(
+        response.analysis.events[0]?.event_id ?? "",
+      );
+      setAnalysisSource(response.source);
       setStage("results");
-    }, 1800);
+    } catch (error) {
+      setAnalysisError(
+        error instanceof Error
+          ? error.message
+          : "Scene analysis failed.",
+      );
+      setStage("lens");
+    }
   }
 
   function renameEvent(eventId: string, objectLabel: string) {
@@ -225,7 +208,9 @@ export function PawSpectiveShell({
         </button>
 
         <div className="topbar-actions">
-          <span className="phase-badge">Phase 2 · Live Dog Lens</span>
+          <span className="phase-badge">
+            Phase 3 · Real scene analysis
+          </span>
 
           <button
             className="text-button"
@@ -453,6 +438,7 @@ export function PawSpectiveShell({
             <LiveDogLens
               visionMix={visionMix}
               onVisionMixChange={setVisionMix}
+              onClipChange={setCapturedClip}
             />
 
             <aside className="lens-sidebar">
@@ -500,17 +486,28 @@ export function PawSpectiveShell({
               </div>
 
               <div className="mock-notice">
-                The camera and Dog Vision filter are live. Object
-                analysis and story generation remain Phase 1 mocks until
-                Phase 3.
+                Record or upload a short clip. Gemini will identify only
+                visibly supported scene objects. Visibility scoring and
+                narration remain later-phase features.
               </div>
+
+              {analysisError && (
+                <div className="analysis-error" role="alert">
+                  {analysisError}
+                </div>
+              )}
 
               <button
                 className="primary-button"
                 type="button"
-                onClick={beginMockAnalysis}
+                disabled={
+                  !capturedClip ||
+                  capturedClip.durationMs < 5_000 ||
+                  capturedClip.durationMs > 15_000
+                }
+                onClick={() => void beginSceneAnalysis()}
               >
-                Continue to mock analysis
+                Analyze captured moment
               </button>
             </aside>
           </div>
@@ -521,18 +518,18 @@ export function PawSpectiveShell({
         <section className="screen processing-screen">
           <div className="processing-mark">🐾</div>
 
-          <p className="eyebrow">Mock analysis</p>
+          <p className="eyebrow">AI scene analysis</p>
           <h1>Finding visible scene signals…</h1>
 
           <p className="lead">
-            We are loading the validated Phase 0 example response. No
-            external AI request is being made.
+            The video is being validated, normalized, and analyzed
+            against the strict Phase 0 scene contract.
           </p>
 
           <div className="processing-list">
-            <span className="done">✓ Scene prepared</span>
+            <span className="done">✓ Clip uploaded</span>
             <span className="loading">● Checking visible objects</span>
-            <span>○ Preparing curiosity map</span>
+            <span>○ Validating scene timeline</span>
           </div>
         </section>
       )}
@@ -541,18 +538,31 @@ export function PawSpectiveShell({
         <section className="screen results-screen">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">Your mock result</p>
-              <h1>{profile.dogName || "Your dog"}&apos;s garden briefing</h1>
+              <p className="eyebrow">Scene analysis</p>
+              <h1>
+                {profile.dogName || "Your dog"}&apos;s visible scene
+              </h1>
             </div>
 
             <button
               className="secondary-button"
               type="button"
-              onClick={() => setStage("lens")}
+              onClick={() => {
+                setCapturedClip(null);
+                setAnalysisError(null);
+                setStage("lens");
+              }}
             >
               Try another moment
             </button>
           </div>
+
+          {analysisSource === "demo" && (
+            <div className="mock-notice">
+              Gemini was unavailable or demo mode is enabled. The
+              validated cached response is being shown.
+            </div>
+          )}
 
           <div className="results-grid">
             <section className="result-card object-review">
@@ -613,8 +623,8 @@ export function PawSpectiveShell({
 
                 {events.length === 0 && (
                   <p className="empty-state">
-                    No objects remain. Return to Dog Lens to restart the
-                    mock analysis.
+                    No objects remain. Return to Dog Lens to analyze
+                    another clip.
                   </p>
                 )}
               </div>
@@ -669,42 +679,22 @@ export function PawSpectiveShell({
             <section className="result-card visibility-card">
               <div className="card-heading">
                 <div>
-                  <span className="label science">
-                    Research-grounded
-                  </span>
+                  <span className="label science">Phase 4 preview</span>
                   <h2>Visibility insight</h2>
                 </div>
-
-                <strong className="score">{score}/100</strong>
               </div>
 
-              {selectedEvent ? (
-                <>
-                  <h3>{selectedEvent.object_label}</h3>
-
-                  <div className="score-track">
-                    <span style={{ width: `${score}%` }} />
-                  </div>
-
-                  <p>
-                    This object remains relatively distinct after the
-                    canine-vision transformation. The score is a
-                    product-relative contrast measure—not a probability.
-                  </p>
-
-                  <small>
-                    Selected from the corrected scene timeline.
-                  </small>
-                </>
-              ) : (
-                <p>Select an object to calculate a mock result.</p>
-              )}
+              <p>
+                Real foreground/background contrast scoring is not yet
+                calculated. It will use the corrected object timeline in
+                the next phase.
+              </p>
             </section>
 
             <section className="result-card story-card">
               <div className="card-heading">
                 <div>
-                  <span className="label fun">Just for fun</span>
+                  <span className="label fun">Phase 5 preview</span>
                   <h2>Story Reel preview</h2>
                 </div>
               </div>

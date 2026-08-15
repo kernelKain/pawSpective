@@ -31,6 +31,7 @@ type UseCameraResult = {
   startCamera: (requestedFacingMode?: FacingMode) => Promise<void>;
   switchCamera: () => Promise<void>;
   stopCamera: () => void;
+  getStream: () => MediaStream | null;
 };
 
 export function describeCameraError(error: unknown): CameraError {
@@ -87,6 +88,11 @@ export function describeCameraError(error: unknown): CameraError {
 export function useCamera(): UseCameraResult {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+
+  const getStream = useCallback(
+    () => streamRef.current,
+    [],
+  );
 
   const [status, setStatus] = useState<CameraStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -199,5 +205,6 @@ export function useCamera(): UseCameraResult {
     startCamera,
     switchCamera,
     stopCamera,
+    getStream,
   };
 }

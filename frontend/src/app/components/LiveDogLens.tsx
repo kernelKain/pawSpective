@@ -7,15 +7,19 @@ import {
   createCanineVisionRenderer,
   type CanineVisionRenderer,
 } from "../lib/canineVisionRenderer";
+import type { CapturedClip } from "../types/sceneAnalysis";
+import { CapturePanel } from "./CapturePanel";
 
 type LiveDogLensProps = {
   visionMix: number;
   onVisionMixChange: (value: number) => void;
+  onClipChange: (clip: CapturedClip | null) => void;
 };
 
 export function LiveDogLens({
   visionMix,
   onVisionMixChange,
+  onClipChange,
 }: LiveDogLensProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rendererRef = useRef<CanineVisionRenderer | null>(null);
@@ -33,6 +37,7 @@ export function LiveDogLens({
     startCamera,
     switchCamera,
     stopCamera,
+    getStream,
   } = useCamera();
 
   useEffect(() => {
@@ -53,6 +58,9 @@ export function LiveDogLens({
         videoRef.current,
       );
 
+      renderer.setMix(visionMix / 100);
+      renderer.setDetailReduction(detailReduction / 100);
+      renderer.setMirror(facingMode === "user");
       renderer.start();
 
       rendererRef.current = renderer;
@@ -271,6 +279,12 @@ export function LiveDogLens({
         educational, not a diagnostic or exact reconstruction of what
         every dog sees.
       </p>
+
+      <CapturePanel
+        cameraReady={status === "ready"}
+        getStream={getStream}
+        onClipChange={onClipChange}
+      />
     </div>
   );
 }

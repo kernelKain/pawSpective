@@ -6,9 +6,20 @@ import {
   screen,
 } from "@testing-library/react";
 import { useState, type RefObject } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
-import { useCamera, type CameraStatus, type FacingMode } from "../hooks/useCamera";
+import {
+  useCamera,
+  type CameraStatus,
+  type FacingMode,
+} from "../hooks/useCamera";
 import {
   createCanineVisionRenderer,
   type CanineVisionRenderer,
@@ -25,10 +36,14 @@ let cameraStatus: CameraStatus;
 let facingMode: FacingMode;
 let renderers: CanineVisionRenderer[];
 
-const videoRef = { current: null } as RefObject<HTMLVideoElement | null>;
+const videoRef = {
+  current: null,
+} as RefObject<HTMLVideoElement | null>;
 const startCamera = vi.fn(async () => undefined);
 const switchCamera = vi.fn(async () => undefined);
 const stopCamera = vi.fn();
+const getStream = vi.fn((): MediaStream | null => null);
+const onClipChange = vi.fn();
 
 function createRendererMock(): CanineVisionRenderer {
   return {
@@ -48,6 +63,7 @@ function LensHarness() {
     <LiveDogLens
       visionMix={visionMix}
       onVisionMixChange={setVisionMix}
+      onClipChange={onClipChange}
     />
   );
 }
@@ -66,6 +82,7 @@ beforeEach(() => {
     startCamera,
     switchCamera,
     stopCamera,
+    getStream,
   }));
 
   mockedCreateRenderer.mockImplementation(() => {
@@ -109,7 +126,9 @@ describe("LiveDogLens", () => {
 
     expect(renderers).toHaveLength(2);
     expect(renderers[1].setMix).toHaveBeenLastCalledWith(0.2);
-    expect(renderers[1].setDetailReduction).toHaveBeenLastCalledWith(0.25);
+    expect(
+      renderers[1].setDetailReduction,
+    ).toHaveBeenLastCalledWith(0.25);
     expect(renderers[1].setMirror).toHaveBeenLastCalledWith(false);
   });
 
@@ -136,9 +155,9 @@ describe("LiveDogLens", () => {
     expect(
       screen.getByText("Approximate head-facing direction"),
     ).toBeDefined();
-    expect(document.querySelector(".alignment-guide")?.textContent).toContain(
-      "+",
-    );
+    expect(
+      document.querySelector(".alignment-guide")?.textContent,
+    ).toContain("+");
   });
 
   it("uses the existing secondary style for renderer recovery", async () => {

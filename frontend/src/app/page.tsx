@@ -1,8 +1,6 @@
 import sceneAnalysis from "@/data/scene-analysis.example.json";
-import {
-  PawSpectiveShell,
-  type SceneEvent,
-} from "./PawSpectiveShell";
+import { PawSpectiveShell } from "./PawSpectiveShell";
+import type { SceneEvent } from "./types/sceneAnalysis";
 
 export default function Home() {
   return (
