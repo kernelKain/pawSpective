@@ -58,6 +58,7 @@ export async function scoreCapturedClip(
   clip: CapturedClip,
   events: SceneEvent[],
   favoriteInterest: string,
+  signal?: AbortSignal,
 ): Promise<VisibilityAnalysisResponse> {
   const formData = new FormData();
 
@@ -76,6 +77,7 @@ export async function scoreCapturedClip(
     {
       method: "POST",
       body: formData,
+      signal,
     },
   );
 

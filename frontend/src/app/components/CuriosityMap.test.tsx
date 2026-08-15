@@ -72,7 +72,7 @@ const scores: VisibilityScore[] = [
     explanation:
       "The object remains distinct after the canine-vision approximation.",
     why: [
-      "Visible motion increased the cue score.",
+      "The AI-inferred motion label increased the cue score.",
     ],
   },
 ];
@@ -145,12 +145,103 @@ describe("CuriosityMap", () => {
 
     expect(
       screen.getByText(
-        "Visible motion increased the cue score.",
+        "The AI-inferred motion label increased the cue score.",
       ),
     ).toBeDefined();
 
     expect(
       screen.getByText(/This is not gaze tracking/i),
     ).toBeDefined();
+  });
+
+  it("keeps the overlay on the uncropped video and controls outside it", () => {
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(
+        () => "blob:pawspective-test",
+      ),
+      revokeObjectURL: vi.fn(),
+    });
+
+    const { container } = render(
+      <CuriosityMap
+        clip={clip}
+        events={events}
+        scores={scores}
+        selectedEventId="ball-1"
+        onSelect={vi.fn()}
+      />,
+    );
+
+    const stage = container.querySelector(
+      ".curiosity-video-stage",
+    );
+    const video = stage?.querySelector("video");
+    const overlay = stage?.querySelector(
+      ".curiosity-overlay",
+    );
+    const controls = container.querySelector(
+      ".curiosity-playback-controls",
+    );
+
+    expect(stage).not.toBeNull();
+    expect(video).not.toBeNull();
+    expect(video?.hasAttribute("controls")).toBe(false);
+    expect(overlay).not.toBeNull();
+    expect(controls).not.toBeNull();
+    expect(stage?.contains(controls)).toBe(false);
+    expect(
+      screen.getByRole("slider", {
+        name: "Video position",
+      }),
+    ).toBeDefined();
+  });
+
+  it("creates object URLs after commit and revokes every replaced URL", () => {
+    const createObjectURL = vi
+      .fn()
+      .mockReturnValueOnce("blob:first")
+      .mockReturnValueOnce("blob:second");
+    const revokeObjectURL = vi.fn();
+
+    vi.stubGlobal("URL", {
+      createObjectURL,
+      revokeObjectURL,
+    });
+
+    const secondClip: CapturedClip = {
+      ...clip,
+      file: new File(
+        ["second-video"],
+        "second.mp4",
+        { type: "video/mp4" },
+      ),
+    };
+
+    const { rerender, unmount } = render(
+      <CuriosityMap
+        clip={clip}
+        events={events}
+        scores={scores}
+        selectedEventId="ball-1"
+        onSelect={vi.fn()}
+      />,
+    );
+
+    rerender(
+      <CuriosityMap
+        clip={secondClip}
+        events={events}
+        scores={scores}
+        selectedEventId="ball-1"
+        onSelect={vi.fn()}
+      />,
+    );
+
+    expect(createObjectURL).toHaveBeenCalledTimes(2);
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:first");
+
+    unmount();
+
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:second");
   });
 });

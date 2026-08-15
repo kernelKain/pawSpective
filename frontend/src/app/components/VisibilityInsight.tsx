@@ -96,7 +96,7 @@ export function VisibilityInsight({
 
       <dl className="salience-breakdown">
         <div>
-          <dt>Motion</dt>
+          <dt>AI-inferred motion</dt>
           <dd>{score.motion_score}/100</dd>
         </div>
         <div>
@@ -115,6 +115,12 @@ export function VisibilityInsight({
           </dd>
         </div>
       </dl>
+
+      <p className="score-method-note">
+        Contrast and apparent size are measured from the selected video
+        frame. Motion is an AI-inferred scene label. The weighting and
+        final rounding are deterministic.
+      </p>
 
       <div className="relative-score-warning">
         This is a relative PawSpective product score—not a probability or

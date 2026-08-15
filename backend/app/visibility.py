@@ -24,12 +24,17 @@ CANINE_MATRIX = np.array(
     dtype=np.float32,
 )
 
-MOTION_SCORES = {
+AI_MOTION_SCORES = {
     MotionLevel.NONE: 0,
     MotionLevel.LOW: 33,
     MotionLevel.MEDIUM: 67,
     MotionLevel.HIGH: 100,
 }
+
+MOTION_WEIGHT = 0.35
+DOG_CONTRAST_WEIGHT = 0.35
+APPARENT_SIZE_WEIGHT = 0.20
+PROFILE_RELEVANCE_WEIGHT = 0.10
 
 MAXIMUM_SAMPLED_PIXELS = 50_000
 MINIMUM_REGION_PIXELS = 25
@@ -218,7 +223,9 @@ def score_event_frame(
         dog_background,
     )
 
-    motion_score = MOTION_SCORES[event.motion_level]
+    # Gemini supplies the ordinal motion label. Mapping that label and
+    # combining all inputs is deterministic, but motion itself is AI-inferred.
+    motion_score = AI_MOTION_SCORES[event.motion_level]
 
     box = event.bounding_box
     normalized_area = (
@@ -237,10 +244,10 @@ def score_event_frame(
 
     # Profile relevance contributes at most ten points.
     salience_score = round(
-        0.35 * motion_score
-        + 0.35 * dog_contrast
-        + 0.20 * apparent_size_score
-        + 0.10 * profile_relevance_score
+        MOTION_WEIGHT * motion_score
+        + DOG_CONTRAST_WEIGHT * dog_contrast
+        + APPARENT_SIZE_WEIGHT * apparent_size_score
+        + PROFILE_RELEVANCE_WEIGHT * profile_relevance_score
     )
 
     contrast_change = dog_contrast - human_contrast
@@ -264,7 +271,7 @@ def score_event_frame(
     why: list[str] = []
 
     if motion_score >= 67:
-        why.append("Visible motion increased the cue score.")
+        why.append("The AI-inferred motion label increased the cue score.")
 
     if dog_contrast >= 67:
         why.append("The transformed object/background contrast is high.")

@@ -22,6 +22,28 @@ type CuriosityMapProps = {
   onSelect: (eventId: string) => void;
 };
 
+function useObjectUrl(file: File) {
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const nextUrl = URL.createObjectURL(file);
+
+    // The URL is an external browser resource that only exists after commit.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setObjectUrl(nextUrl);
+
+    return () => {
+      URL.revokeObjectURL(nextUrl);
+    };
+  }, [file]);
+
+  return objectUrl;
+}
+
+function formatPlaybackTime(timeMs: number) {
+  return `${(timeMs / 1000).toFixed(1)}s`;
+}
+
 export function CuriosityMap({
   clip,
   events,
@@ -30,22 +52,15 @@ export function CuriosityMap({
   onSelect,
 }: CuriosityMapProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const videoUrl = useMemo(
-    () => URL.createObjectURL(clip.file),
-    [clip.file],
-  );
+  const videoUrl = useObjectUrl(clip.file);
   const [currentTimeMs, setCurrentTimeMs] = useState(0);
+  const [durationMs, setDurationMs] = useState(clip.durationMs);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const scoresById = useMemo(
     () => new Map(scores.map((score) => [score.event_id, score])),
     [scores],
   );
-
-  useEffect(() => {
-    return () => {
-      URL.revokeObjectURL(videoUrl);
-    };
-  }, [videoUrl]);
 
   function seekToEvent(event: SceneEvent) {
     onSelect(event.event_id);
@@ -53,6 +68,35 @@ export function CuriosityMap({
     if (videoRef.current) {
       videoRef.current.currentTime = event.timestamp_ms / 1000;
       setCurrentTimeMs(event.timestamp_ms);
+    }
+  }
+
+  function seekToTime(timeMs: number) {
+    const boundedTimeMs = Math.min(
+      Math.max(timeMs, 0),
+      durationMs,
+    );
+
+    if (videoRef.current) {
+      videoRef.current.currentTime = boundedTimeMs / 1000;
+    }
+
+    setCurrentTimeMs(boundedTimeMs);
+  }
+
+  function togglePlayback() {
+    const video = videoRef.current;
+
+    if (!video) {
+      return;
+    }
+
+    if (video.paused) {
+      void video.play().catch(() => {
+        setIsPlaying(false);
+      });
+    } else {
+      video.pause();
     }
   }
 
@@ -80,10 +124,18 @@ export function CuriosityMap({
           <video
             ref={videoRef}
             src={videoUrl}
-            controls
             muted
             playsInline
             onLoadedMetadata={() => {
+              if (
+                videoRef.current &&
+                Number.isFinite(videoRef.current.duration)
+              ) {
+                setDurationMs(
+                  Math.round(videoRef.current.duration * 1000),
+                );
+              }
+
               const selectedEvent = events.find(
                 (event) => event.event_id === selectedEventId,
               );
@@ -99,6 +151,9 @@ export function CuriosityMap({
                 Math.round(event.currentTarget.currentTime * 1000),
               )
             }
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+            onEnded={() => setIsPlaying(false)}
           />
         )}
 
@@ -145,6 +200,35 @@ export function CuriosityMap({
             );
           })}
         </div>
+      </div>
+
+      <div className="curiosity-playback-controls">
+        <button
+          type="button"
+          onClick={togglePlayback}
+          disabled={!videoUrl}
+          aria-label={isPlaying ? "Pause video" : "Play video"}
+        >
+          {isPlaying ? "Pause" : "Play"}
+        </button>
+
+        <input
+          type="range"
+          min={0}
+          max={Math.max(durationMs, 1)}
+          step={100}
+          value={Math.min(currentTimeMs, Math.max(durationMs, 1))}
+          onChange={(event) =>
+            seekToTime(Number(event.target.value))
+          }
+          aria-label="Video position"
+          disabled={!videoUrl}
+        />
+
+        <span>
+          {formatPlaybackTime(currentTimeMs)} /{" "}
+          {formatPlaybackTime(durationMs)}
+        </span>
       </div>
 
       <div className="curiosity-timeline">

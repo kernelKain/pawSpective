@@ -145,6 +145,7 @@ describe("scoreCapturedClip", () => {
     );
 
     vi.stubGlobal("fetch", fetchMock);
+    const abortController = new AbortController();
 
     await expect(
       scoreCapturedClip(
@@ -167,6 +168,7 @@ describe("scoreCapturedClip", () => {
           },
         ],
         "Ball",
+        abortController.signal,
       ),
     ).resolves.toEqual(responsePayload);
 
@@ -179,6 +181,7 @@ describe("scoreCapturedClip", () => {
     );
     expect(request.method).toBe("POST");
     expect(request.body).toBeInstanceOf(FormData);
+    expect(request.signal).toBe(abortController.signal);
 
     const formData = request.body as FormData;
     const payload = JSON.parse(

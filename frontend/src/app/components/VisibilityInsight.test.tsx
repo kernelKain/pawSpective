@@ -56,14 +56,14 @@ const score: VisibilityScore = {
   explanation:
     "The object remains distinct after the canine-vision approximation.",
   why: [
-    "Visible motion increased the cue score.",
+    "The AI-inferred motion label increased the cue score.",
     "The transformed object/background contrast is high.",
   ],
 };
 
-  afterEach(() => {
-    cleanup();
-  });
+afterEach(() => {
+  cleanup();
+});
 
 describe("VisibilityInsight", () => {
   it("shows human and dog-visible contrast meters", () => {
@@ -121,6 +121,15 @@ describe("VisibilityInsight", () => {
     expect(
       screen.getByText(
         /not a probability or scientifically exact measure/i,
+      ),
+    ).toBeDefined();
+
+    expect(
+      screen.getByText("AI-inferred motion"),
+    ).toBeDefined();
+    expect(
+      screen.getByText(
+        /Motion is an AI-inferred scene label/i,
       ),
     ).toBeDefined();
   });

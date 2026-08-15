@@ -27,9 +27,10 @@ Every generated result must use one of these labels.
 ### Research-grounded
 Used for deterministic transformations and calculations:
 - Canine color transformation
+- Foreground/background color sampling
 - Foreground/background contrast calculation
-- Motion calculation
-- Salience formula
+- Apparent-size calculation
+- Salience weighting and rounding
 
 ### AI-inferred
 Used for model-generated scene interpretation:
@@ -37,6 +38,7 @@ Used for model-generated scene interpretation:
 - Bounding boxes
 - Object categories
 - Visible scene evidence
+- Ordinal motion level
 - Possible attention cues
 
 ### Just for fun
@@ -147,14 +149,39 @@ Corrected data becomes the source of truth for later processing.
 A dog-visible contrast score is a relative product score. It is not a
 probability and must not be presented as a scientifically exact measure.
 
+For each corrected event, the backend:
+
+1. Seeks the normalized video to the event timestamp.
+2. Uses the inner 76% of the normalized bounding box as the object sample.
+3. Uses the surrounding ring, expanded by 40% of box width and height, as the
+   nearby-background sample.
+4. Uses per-channel median colors, capped at 50,000 sampled pixels per region.
+5. Applies the same canine color matrix and sRGB transfer approximation used
+   by the live frontend shader.
+6. Converts object/background colors to CIE Lab and maps Delta E 80 or greater
+   to the maximum relative contrast score.
+
 Curiosity Map salience is calculated from:
-- Motion
-- Dog-visible contrast
-- Apparent proximity
-- Optional profile relevance
+
+- 35% AI-inferred ordinal motion (`none=0`, `low=33`, `medium=67`,
+  `high=100`)
+- 35% measured dog-visible contrast
+- 20% apparent size, calculated as
+  `round(min(1, sqrt(normalized_box_area) / 0.5) * 100)`
+- 10% optional profile relevance
+
+The weighted result uses Python's nearest-integer `round` behavior, including
+ties-to-even. Scores from 0–33 are low, 34–66 are medium, and 67–100 are high.
+The formula and rounding are deterministic; the motion input is AI-inferred
+and must be labeled that way.
 
 Profile relevance may provide only a small bonus and must never override
-visible evidence.
+visible evidence. “Sniffing” cannot create a visual profile bonus.
+
+Cached demo bounding boxes do not belong to the uploaded video and must never
+be submitted to visibility scoring. Renaming, removing, or replacing an event
+invalidates previous scores. Late responses from invalidated requests must be
+ignored.
 
 ## Story contract
 The story generator receives only:
@@ -180,3 +207,25 @@ Phase 0 is complete when:
 - Unexpected fields fail validation.
 - The JSON Schema can be generated from the Python model.
 - The demo team agrees on the must-ship and deferred lists.
+
+## Phase 4 exit criteria
+
+Phase 4 implementation is complete when:
+
+- Corrected Gemini events can be scored against their original normalized
+  video.
+- Real FFmpeg/OpenCV tests cover seeking, scoring, invalid timestamps,
+  unreadable frames, undersized regions, partial warnings, and complete
+  scoring failure.
+- Golden transformation, known-color contrast, component-weight, and rounding
+  regressions pass.
+- Curiosity Map video is uncropped and its overlay shares the exact video
+  content rectangle for portrait and landscape clips.
+- Playback controls do not occupy the normalized overlay coordinate area.
+- AI-inferred motion is distinguished from measured and deterministic inputs.
+- Editing or navigation cannot restore stale in-flight scoring results.
+- Demo-result scoring remains prohibited.
+- Automated lint, frontend tests, production build, and backend tests pass.
+
+Release acceptance additionally requires the physical-device and live-Gemini
+checks in `docs/phase-4-acceptance-checklist.md`.

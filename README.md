@@ -4,18 +4,25 @@ See the world closer to how your dog sees it. PawSpective combines a
 canine-vision approximation, AI-supported scene analysis, user-reviewed
 objects, curiosity mapping, and playful story previews.
 
-## Phase 3 capabilities
+## Phase 4 capabilities
 
 - Live camera with a Human/Dog Vision comparison control.
-- Five-to-ten-second browser recording or MP4, WebM, MOV, and MKV upload.
+- Five-to-fifteen-second browser recording or MP4, WebM, MOV, and MKV upload.
 - Backend MIME, file-size, and FFprobe duration validation.
 - FFmpeg normalization to a compact 720p, 15 FPS MP4.
 - Gemini 3.6 Flash scene analysis with strict Pydantic validation.
 - Clearly labeled cached demo fallback when Gemini is unavailable.
 - User selection, renaming, and removal of detected scene objects.
+- Frame-level foreground/background sampling from corrected bounding boxes.
+- Human and canine-approximation Lab contrast scoring.
+- Curiosity scoring with deterministic weights for AI-inferred motion,
+  measured contrast, apparent size, and a capped profile bonus.
+- A real-video Curiosity Map with timestamp seeking and aligned bounding boxes.
+- Visibility Insight with color samples, score breakdowns, and accuracy labels.
+- In-flight request cancellation and stale-score protection after navigation or
+  object corrections.
 
-Visibility scoring and generated story reels remain Phase 4 and Phase 5
-features.
+Generated and downloadable story reels remain a Phase 5 feature.
 
 ## Prerequisites
 
@@ -100,20 +107,25 @@ Set-Location ..
 python -m pytest
 ```
 
-The backend suite includes a real generated-video FFmpeg test. It is skipped
-locally only when FFmpeg is not installed; CI explicitly verifies that both
-FFmpeg and FFprobe exist before running the tests.
+The backend suite generates a real colored MP4, normalizes it with FFmpeg,
+opens and seeks it with OpenCV, and calculates actual Phase 4 visibility
+scores. Real-media tests are skipped locally only when FFmpeg is unavailable;
+CI explicitly verifies that FFmpeg and FFprobe exist before running tests.
 
-## Manual Phase 3 acceptance
+## Manual Phase 4 acceptance
 
-Before a demo or release, verify the following on the intended devices:
+Complete [the Phase 4 acceptance checklist](docs/phase-4-acceptance-checklist.md)
+on the actual demo deployment and hardware before calling the phase
+release-ready. At minimum:
 
-1. Record a clip in desktop Chrome and confirm real Gemini events appear.
-2. Record or upload on Android Chrome.
-3. Record or upload on iPhone Safari.
-4. Use an invalid Gemini key and confirm the result is visibly labeled as a
-   cached demo fallback.
-5. Confirm short, long, corrupt, and unsupported files show safe errors.
-6. Confirm analysis usually completes within the Phase 3 target of 20 seconds.
+1. Run a real Gemini result through correction and visibility scoring.
+2. Record or upload portrait and landscape clips on desktop Chrome, Android
+   Chrome, and iPhone Safari.
+3. Confirm every Curiosity Map box remains aligned at desktop and mobile
+   widths.
+4. Confirm cached demo detections cannot enter visibility scoring.
+5. Confirm correcting an event requires recalculation and no late request can
+   restore an old score.
+6. Record scene-analysis and visibility-scoring latency on the demo hardware.
 
 Never commit `.env`, `.env.local`, API keys, or generated media.

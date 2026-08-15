@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 
 import { CuriosityMap } from "./components/CuriosityMap";
@@ -100,12 +100,26 @@ export function PawSpectiveShell({
     string | null
   >(null);
   const [isScoring, setIsScoring] = useState(false);
+  const visibilityRequestIdRef = useRef(0);
+  const visibilityAbortControllerRef =
+    useRef<AbortController | null>(null);
 
   function invalidateVisibilityScores() {
+    visibilityRequestIdRef.current += 1;
+    visibilityAbortControllerRef.current?.abort();
+    visibilityAbortControllerRef.current = null;
+    setIsScoring(false);
     setVisibilityScores([]);
     setVisibilityWarnings([]);
     setVisibilityError(null);
   }
+
+  useEffect(() => {
+    return () => {
+      visibilityRequestIdRef.current += 1;
+      visibilityAbortControllerRef.current?.abort();
+    };
+  }, []);
 
   function updateProfile<K extends keyof Profile>(
     key: K,
@@ -222,7 +236,16 @@ export function PawSpectiveShell({
       return;
     }
 
+    visibilityAbortControllerRef.current?.abort();
+
+    const requestId = visibilityRequestIdRef.current + 1;
+    const abortController = new AbortController();
+
+    visibilityRequestIdRef.current = requestId;
+    visibilityAbortControllerRef.current = abortController;
+
     setIsScoring(true);
+    setVisibilityScores([]);
     setVisibilityError(null);
     setVisibilityWarnings([]);
 
@@ -234,18 +257,38 @@ export function PawSpectiveShell({
           object_label: event.object_label.trim(),
         })),
         profile.favorite,
+        abortController.signal,
       );
+
+      if (
+        requestId !== visibilityRequestIdRef.current ||
+        abortController.signal.aborted
+      ) {
+        return;
+      }
 
       setVisibilityScores(response.scores);
       setVisibilityWarnings(response.warnings);
     } catch (error) {
+      if (
+        requestId !== visibilityRequestIdRef.current ||
+        abortController.signal.aborted ||
+        (error instanceof DOMException &&
+          error.name === "AbortError")
+      ) {
+        return;
+      }
+
       setVisibilityError(
         error instanceof Error
           ? error.message
           : "Visibility scoring failed.",
       );
     } finally {
-      setIsScoring(false);
+      if (requestId === visibilityRequestIdRef.current) {
+        visibilityAbortControllerRef.current = null;
+        setIsScoring(false);
+      }
     }
   }
 
@@ -312,7 +355,10 @@ export function PawSpectiveShell({
           className="brand"
           type="button"
           disabled={isRecording}
-          onClick={() => setStage("profile")}
+          onClick={() => {
+            invalidateVisibilityScores();
+            setStage("profile");
+          }}
           aria-label="Return to profile"
         >
           <span className="brand-mark">P</span>
@@ -767,6 +813,7 @@ export function PawSpectiveShell({
             <button
               className="secondary-button"
               type="button"
+              disabled={isScoring}
               onClick={() => {
                 setCapturedClip(null);
                 setAnalysisError(null);
@@ -826,6 +873,7 @@ export function PawSpectiveShell({
                         event.event_id
                       }
                       aria-label={`Use ${event.object_label} for visibility analysis`}
+                      disabled={isScoring}
                       onChange={() =>
                         setSelectedEventId(
                           event.event_id,
@@ -837,6 +885,7 @@ export function PawSpectiveShell({
                       <input
                         className="event-name"
                         value={event.object_label}
+                        disabled={isScoring}
                         onChange={(changeEvent) =>
                           renameEvent(
                             event.event_id,
@@ -866,6 +915,7 @@ export function PawSpectiveShell({
                     <button
                       type="button"
                       aria-label={`Remove ${event.object_label}`}
+                      disabled={isScoring}
                       onClick={() =>
                         removeEvent(event.event_id)
                       }
@@ -934,7 +984,7 @@ export function PawSpectiveShell({
               <div className="card-heading">
                 <div>
                   <span className="label ai">
-                    AI boxes + deterministic score
+                    AI boxes + deterministic weighting
                   </span>
 
                   <h2>Curiosity Map</h2>
@@ -964,7 +1014,7 @@ export function PawSpectiveShell({
               <div className="card-heading">
                 <div>
                   <span className="label science">
-                    Research-grounded
+                    Measured + AI-labeled inputs
                   </span>
 
                   <h2>Visibility insight</h2>
@@ -1081,7 +1131,8 @@ export function PawSpectiveShell({
                 <p>
                   Canine color transformation and
                   foreground/background contrast
-                  calculation.
+                  calculation, apparent-size measurement,
+                  and deterministic score weighting.
                 </p>
               </div>
             </div>
@@ -1096,8 +1147,8 @@ export function PawSpectiveShell({
 
                 <p>
                   Object identification, bounding
-                  boxes and possible visible attention
-                  cues.
+                  boxes, ordinal motion labels, and
+                  possible visible attention cues.
                 </p>
               </div>
             </div>
