@@ -38,3 +38,36 @@ export type CapturedClip = {
   durationMs: number;
   source: "recording" | "upload";
 };
+
+export type SalienceLevel = "low" | "medium" | "high";
+
+export type VisibilityScore = {
+  event_id: string;
+  identification_confidence: number;
+
+  human_contrast_score: number;
+  dog_contrast_score: number;
+  contrast_change: number;
+
+  motion_score: number;
+  apparent_size_score: number;
+  profile_relevance_score: number;
+
+  salience_score: number;
+  salience_level: SalienceLevel;
+
+  human_object_color: string;
+  human_background_color: string;
+  dog_object_color: string;
+  dog_background_color: string;
+
+  explanation: string;
+  why: string[];
+};
+
+export type VisibilityAnalysisResponse = {
+  scoring_version: "1.0";
+  method: "bbox-region-lab-v1";
+  scores: VisibilityScore[];
+  warnings: string[];
+};

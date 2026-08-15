@@ -1,23 +1,31 @@
 import json
 from pathlib import Path
 
-from backend.app.contracts import SceneAnalysisResponse
+from backend.app.contracts import (
+    SceneAnalysisResponse,
+    VisibilityAnalysisResponse,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-OUTPUT_PATH = PROJECT_ROOT / "contracts" / "scene-analysis.schema.json"
+
+SCHEMAS = {
+    "scene-analysis.schema.json": SceneAnalysisResponse,
+    "visibility-analysis.schema.json": VisibilityAnalysisResponse,
+}
 
 
 def main() -> None:
-    schema = SceneAnalysisResponse.model_json_schema()
+    output_directory = PROJECT_ROOT / "contracts"
+    output_directory.mkdir(parents=True, exist_ok=True)
 
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT_PATH.write_text(
-        json.dumps(schema, indent=2),
-        encoding="utf-8",
-    )
-
-    print(f"Schema written to {OUTPUT_PATH}")
+    for filename, model in SCHEMAS.items():
+        output_path = output_directory / filename
+        output_path.write_text(
+            json.dumps(model.model_json_schema(), indent=2),
+            encoding="utf-8",
+        )
+        print(f"Schema written to {output_path}")
 
 
 if __name__ == "__main__":

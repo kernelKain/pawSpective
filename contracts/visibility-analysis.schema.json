@@ -1,0 +1,162 @@
+{
+  "$defs": {
+    "SalienceLevel": {
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "title": "SalienceLevel",
+      "type": "string"
+    },
+    "VisibilityScore": {
+      "additionalProperties": false,
+      "properties": {
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "identification_confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Identification Confidence",
+          "type": "number"
+        },
+        "human_contrast_score": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Human Contrast Score",
+          "type": "integer"
+        },
+        "dog_contrast_score": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Dog Contrast Score",
+          "type": "integer"
+        },
+        "contrast_change": {
+          "maximum": 100,
+          "minimum": -100,
+          "title": "Contrast Change",
+          "type": "integer"
+        },
+        "motion_score": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Motion Score",
+          "type": "integer"
+        },
+        "apparent_size_score": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Apparent Size Score",
+          "type": "integer"
+        },
+        "profile_relevance_score": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Profile Relevance Score",
+          "type": "integer"
+        },
+        "salience_score": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Salience Score",
+          "type": "integer"
+        },
+        "salience_level": {
+          "$ref": "#/$defs/SalienceLevel"
+        },
+        "human_object_color": {
+          "pattern": "^#[0-9A-F]{6}$",
+          "title": "Human Object Color",
+          "type": "string"
+        },
+        "human_background_color": {
+          "pattern": "^#[0-9A-F]{6}$",
+          "title": "Human Background Color",
+          "type": "string"
+        },
+        "dog_object_color": {
+          "pattern": "^#[0-9A-F]{6}$",
+          "title": "Dog Object Color",
+          "type": "string"
+        },
+        "dog_background_color": {
+          "pattern": "^#[0-9A-F]{6}$",
+          "title": "Dog Background Color",
+          "type": "string"
+        },
+        "explanation": {
+          "maxLength": 400,
+          "minLength": 1,
+          "title": "Explanation",
+          "type": "string"
+        },
+        "why": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 4,
+          "title": "Why",
+          "type": "array"
+        }
+      },
+      "required": [
+        "event_id",
+        "identification_confidence",
+        "human_contrast_score",
+        "dog_contrast_score",
+        "contrast_change",
+        "motion_score",
+        "apparent_size_score",
+        "profile_relevance_score",
+        "salience_score",
+        "salience_level",
+        "human_object_color",
+        "human_background_color",
+        "dog_object_color",
+        "dog_background_color",
+        "explanation"
+      ],
+      "title": "VisibilityScore",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "scoring_version": {
+      "const": "1.0",
+      "title": "Scoring Version",
+      "type": "string"
+    },
+    "method": {
+      "const": "bbox-region-lab-v1",
+      "title": "Method",
+      "type": "string"
+    },
+    "scores": {
+      "items": {
+        "$ref": "#/$defs/VisibilityScore"
+      },
+      "maxItems": 12,
+      "title": "Scores",
+      "type": "array"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 12,
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "scoring_version",
+    "method",
+    "scores"
+  ],
+  "title": "VisibilityAnalysisResponse",
+  "type": "object"
+}

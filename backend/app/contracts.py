@@ -87,3 +87,56 @@ class SceneAnalysisResponse(StrictModel):
             )
 
         return self
+
+class SalienceLevel(str, Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class VisibilityScoreRequest(StrictModel):
+    # Demo boxes belong to the cached example and must not be scored against
+    # an unrelated uploaded video.
+    analysis_source: Literal["gemini"]
+    events: list[SceneEvent] = Field(min_length=1, max_length=12)
+    favorite_interest: str = Field(default="", max_length=40)
+
+    @model_validator(mode="after")
+    def validate_event_ids(self) -> "VisibilityScoreRequest":
+        event_ids = [event.event_id for event in self.events]
+
+        if len(event_ids) != len(set(event_ids)):
+            raise ValueError("event_id values must be unique")
+
+        return self
+
+
+class VisibilityScore(StrictModel):
+    event_id: str
+    identification_confidence: float = Field(ge=0.0, le=1.0)
+
+    human_contrast_score: int = Field(ge=0, le=100)
+    dog_contrast_score: int = Field(ge=0, le=100)
+    contrast_change: int = Field(ge=-100, le=100)
+
+    motion_score: int = Field(ge=0, le=100)
+    apparent_size_score: int = Field(ge=0, le=100)
+    profile_relevance_score: int = Field(ge=0, le=100)
+
+    salience_score: int = Field(ge=0, le=100)
+    salience_level: SalienceLevel
+
+    human_object_color: str = Field(pattern=r"^#[0-9A-F]{6}$")
+    human_background_color: str = Field(pattern=r"^#[0-9A-F]{6}$")
+    dog_object_color: str = Field(pattern=r"^#[0-9A-F]{6}$")
+    dog_background_color: str = Field(pattern=r"^#[0-9A-F]{6}$")
+
+    explanation: str = Field(min_length=1, max_length=400)
+    why: list[str] = Field(default_factory=list, max_length=4)
+
+
+class VisibilityAnalysisResponse(StrictModel):
+    scoring_version: Literal["1.0"]
+    method: Literal["bbox-region-lab-v1"]
+    scores: list[VisibilityScore] = Field(max_length=12)
+    warnings: list[str] = Field(default_factory=list, max_length=12)

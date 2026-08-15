@@ -178,3 +178,98 @@ def test_accepts_valid_video_pipeline(
 
     assert body["source"] == "demo"
     assert len(body["analysis"]["events"]) == 3
+
+def test_visibility_endpoint_scores_corrected_events(
+    monkeypatch,
+) -> None:
+    import backend.app.main as main_module
+
+    from backend.app.contracts import VisibilityAnalysisResponse
+
+    payload = {
+        "analysis_source": "gemini",
+        "favorite_interest": "Ball",
+        "events": [
+            {
+                "event_id": "ball-1",
+                "timestamp_ms": 1_000,
+                "object_label": "blue ball",
+                "category": "toy",
+                "bounding_box": {
+                    "x_min": 0.2,
+                    "y_min": 0.2,
+                    "x_max": 0.5,
+                    "y_max": 0.5,
+                },
+                "confidence": 0.92,
+                "visible_evidence": "A blue ball is visible.",
+                "motion_level": "medium",
+            },
+        ],
+    }
+
+    monkeypatch.setattr(main_module, "probe_duration_ms", lambda _: 8_000)
+    monkeypatch.setattr(
+        main_module,
+        "normalize_video",
+        lambda source, destination: copyfile(source, destination),
+    )
+
+    monkeypatch.setattr(
+        main_module,
+        "score_visibility_events",
+        lambda *args: VisibilityAnalysisResponse.model_validate(
+            {
+                "scoring_version": "1.0",
+                "method": "bbox-region-lab-v1",
+                "warnings": [],
+                "scores": [
+                    {
+                        "event_id": "ball-1",
+                        "identification_confidence": 0.92,
+                        "human_contrast_score": 70,
+                        "dog_contrast_score": 84,
+                        "contrast_change": 14,
+                        "motion_score": 67,
+                        "apparent_size_score": 60,
+                        "profile_relevance_score": 100,
+                        "salience_score": 75,
+                        "salience_level": "high",
+                        "human_object_color": "#2055D0",
+                        "human_background_color": "#438A35",
+                        "dog_object_color": "#3F6BC8",
+                        "dog_background_color": "#8A813B",
+                        "explanation": "The transformed regions remain distinct.",
+                        "why": ["The transformed contrast is high."],
+                    },
+                ],
+            },
+        ),
+    )
+
+    response = client.post(
+        "/api/v1/score-visibility",
+        files={"file": ("clip.mp4", b"video", "video/mp4")},
+        data={"payload": json.dumps(payload)},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["scores"][0]["salience_score"] == 75
+
+
+def test_visibility_endpoint_rejects_demo_events() -> None:
+    response = client.post(
+        "/api/v1/score-visibility",
+        files={"file": ("clip.mp4", b"video", "video/mp4")},
+        data={
+            "payload": json.dumps(
+                {
+                    "analysis_source": "demo",
+                    "favorite_interest": "Ball",
+                    "events": [],
+                },
+            ),
+        },
+    )
+
+    assert response.status_code == 422
