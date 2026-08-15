@@ -1,4 +1,5 @@
 import json
+import math
 import shutil
 import subprocess
 from pathlib import Path
@@ -18,6 +19,11 @@ class MediaValidationError(ValueError):
     pass
 
 
+def format_megabytes(byte_count: int) -> str:
+    megabytes = byte_count / (1024 * 1024)
+    return f"{megabytes:g} MB"
+
+
 async def save_upload(
     upload: UploadFile,
     destination: Path,
@@ -25,25 +31,28 @@ async def save_upload(
 ) -> int:
     total_bytes = 0
 
-    with destination.open("wb") as output:
-        while chunk := await upload.read(1024 * 1024):
-            total_bytes += len(chunk)
+    try:
+        with destination.open("wb") as output:
+            while chunk := await upload.read(1024 * 1024):
+                total_bytes += len(chunk)
 
-            if total_bytes > maximum_bytes:
-                output.close()
-                destination.unlink(missing_ok=True)
+                if total_bytes > maximum_bytes:
+                    raise MediaValidationError(
+                        "The video is larger than the "
+                        f"{format_megabytes(maximum_bytes)} limit.",
+                    )
 
-                raise MediaValidationError(
-                    "The video is larger than the 30 MB limit.",
-                )
+                output.write(chunk)
 
-            output.write(chunk)
+        if total_bytes == 0:
+            raise MediaValidationError("The uploaded video is empty.")
 
-    await upload.close()
-
-    if total_bytes == 0:
+    except Exception:
         destination.unlink(missing_ok=True)
-        raise MediaValidationError("The uploaded video is empty.")
+        raise
+
+    finally:
+        await upload.close()
 
     return total_bytes
 
@@ -54,22 +63,27 @@ def probe_duration_ms(video_path: Path) -> int:
             "FFprobe is unavailable on the backend.",
         )
 
-    result = subprocess.run(
-        [
-            "ffprobe",
-            "-v",
-            "error",
-            "-show_entries",
-            "format=duration",
-            "-of",
-            "json",
-            str(video_path),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=20,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "json",
+                str(video_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise MediaValidationError(
+            "Reading the video metadata timed out.",
+        ) from error
 
     if result.returncode != 0:
         raise MediaValidationError(
@@ -79,6 +93,9 @@ def probe_duration_ms(video_path: Path) -> int:
     try:
         payload = json.loads(result.stdout)
         duration_seconds = float(payload["format"]["duration"])
+
+        if not math.isfinite(duration_seconds) or duration_seconds <= 0:
+            raise ValueError("duration must be finite and positive")
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
         raise MediaValidationError(
             "The video duration could not be determined.",
@@ -96,34 +113,45 @@ def normalize_video(
             "FFmpeg is unavailable on the backend.",
         )
 
-    result = subprocess.run(
-        [
-            "ffmpeg",
-            "-y",
-            "-i",
-            str(source_path),
-            "-an",
-            "-vf",
-            "scale=min(720\\,iw):-2,fps=15",
-            "-c:v",
-            "libx264",
-            "-preset",
-            "veryfast",
-            "-crf",
-            "23",
-            "-pix_fmt",
-            "yuv420p",
-            "-movflags",
-            "+faststart",
-            str(destination_path),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=90,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(source_path),
+                "-an",
+                "-vf",
+                "scale=min(720\\,iw):-2,fps=15",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "veryfast",
+                "-crf",
+                "23",
+                "-pix_fmt",
+                "yuv420p",
+                "-movflags",
+                "+faststart",
+                str(destination_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=90,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as error:
+        destination_path.unlink(missing_ok=True)
+        raise MediaValidationError(
+            "Video normalization timed out.",
+        ) from error
 
-    if result.returncode != 0 or not destination_path.exists():
+    if (
+        result.returncode != 0
+        or not destination_path.exists()
+        or destination_path.stat().st_size == 0
+    ):
+        destination_path.unlink(missing_ok=True)
         raise MediaValidationError(
             "The video could not be normalized.",
         )

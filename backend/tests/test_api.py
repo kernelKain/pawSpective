@@ -5,6 +5,8 @@ from shutil import copyfile
 from fastapi.testclient import TestClient
 
 from backend.app.contracts import SceneAnalysisResponse
+from backend.app.analysis import SceneAnalysisError
+from backend.app.media import MediaValidationError
 from backend.app.main import app
 
 
@@ -38,6 +40,81 @@ def test_rejects_unsupported_media_type() -> None:
     )
 
     assert response.status_code == 415
+
+
+def test_rejects_empty_video() -> None:
+    response = client.post(
+        "/api/v1/analyze-video",
+        files={"file": ("clip.mp4", b"", "video/mp4")},
+    )
+
+    assert response.status_code == 422
+    assert "empty" in response.json()["detail"]
+
+
+def test_rejects_video_outside_duration_limits(monkeypatch) -> None:
+    import backend.app.main as main_module
+
+    for duration_ms, expected_message in [
+        (4_999, "at least five seconds"),
+        (15_001, "maximum accepted duration"),
+    ]:
+        monkeypatch.setattr(
+            main_module,
+            "probe_duration_ms",
+            lambda _, duration=duration_ms: duration,
+        )
+
+        response = client.post(
+            "/api/v1/analyze-video",
+            files={"file": ("clip.mp4", b"video", "video/mp4")},
+        )
+
+        assert response.status_code == 422
+        assert expected_message in response.json()["detail"]
+
+
+def test_translates_media_failure_to_validation_response(monkeypatch) -> None:
+    import backend.app.main as main_module
+
+    def fail_probe(_: Path) -> int:
+        raise MediaValidationError("Reading the video metadata timed out.")
+
+    monkeypatch.setattr(main_module, "probe_duration_ms", fail_probe)
+
+    response = client.post(
+        "/api/v1/analyze-video",
+        files={"file": ("clip.mp4", b"video", "video/mp4")},
+    )
+
+    assert response.status_code == 422
+    assert "timed out" in response.json()["detail"]
+
+
+def test_translates_scene_analysis_failure_to_gateway_response(
+    monkeypatch,
+) -> None:
+    import backend.app.main as main_module
+
+    monkeypatch.setattr(main_module, "probe_duration_ms", lambda _: 8_000)
+    monkeypatch.setattr(
+        main_module,
+        "normalize_video",
+        lambda source, destination: copyfile(source, destination),
+    )
+
+    def fail_analysis(*args):
+        raise SceneAnalysisError("Gemini failed")
+
+    monkeypatch.setattr(main_module, "analyze_video", fail_analysis)
+
+    response = client.post(
+        "/api/v1/analyze-video",
+        files={"file": ("clip.mp4", b"video", "video/mp4")},
+    )
+
+    assert response.status_code == 502
+    assert "temporarily unavailable" in response.json()["detail"]
 
 
 def test_accepts_valid_video_pipeline(

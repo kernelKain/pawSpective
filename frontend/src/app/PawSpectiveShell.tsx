@@ -86,6 +86,7 @@ export function PawSpectiveShell({
     useState<string | null>(null);
   const [analysisSource, setAnalysisSource] =
     useState<"gemini" | "demo" | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
 
   function updateProfile<K extends keyof Profile>(
     key: K,
@@ -166,6 +167,10 @@ export function PawSpectiveShell({
   }
 
   function renameEvent(eventId: string, objectLabel: string) {
+    if (objectLabel.length > 80 || objectLabel.trim().length === 0) {
+      return;
+    }
+
     setEvents((current) =>
       current.map((event) =>
         event.event_id === eventId
@@ -197,6 +202,7 @@ export function PawSpectiveShell({
         <button
           className="brand"
           type="button"
+          disabled={isRecording}
           onClick={() => setStage("profile")}
           aria-label="Return to profile"
         >
@@ -428,6 +434,7 @@ export function PawSpectiveShell({
             <button
               className="secondary-button"
               type="button"
+              disabled={isRecording}
               onClick={() => setStage("profile")}
             >
               Edit profile
@@ -439,6 +446,7 @@ export function PawSpectiveShell({
               visionMix={visionMix}
               onVisionMixChange={setVisionMix}
               onClipChange={setCapturedClip}
+              onRecordingChange={setIsRecording}
             />
 
             <aside className="lens-sidebar">
@@ -502,6 +510,7 @@ export function PawSpectiveShell({
                 type="button"
                 disabled={
                   !capturedClip ||
+                  isRecording ||
                   capturedClip.durationMs < 5_000 ||
                   capturedClip.durationMs > 15_000
                 }
@@ -601,6 +610,12 @@ export function PawSpectiveShell({
                           renameEvent(
                             event.event_id,
                             changeEvent.target.value,
+                          )
+                        }
+                        onBlur={(blurEvent) =>
+                          renameEvent(
+                            event.event_id,
+                            blurEvent.target.value.trim(),
                           )
                         }
                       />

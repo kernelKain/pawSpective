@@ -1300,6 +1300,12 @@ footer p {
   background: rgba(31, 54, 40, 0.9);
 }
 
+.camera-control-button:disabled,
+.upload-button.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .camera-control-button:focus-visible {
   outline: 3px solid rgba(190, 235, 171, 0.75);
   outline-offset: 2px;

@@ -106,7 +106,8 @@ async def analyze_uploaded_video(
 
             if duration_ms > maximum_duration_ms:
                 raise MediaValidationError(
-                    "The maximum accepted duration is 15 seconds.",
+                    "The maximum accepted duration is "
+                    f"{settings.max_video_duration_seconds} seconds.",
                 )
 
             await asyncio.to_thread(

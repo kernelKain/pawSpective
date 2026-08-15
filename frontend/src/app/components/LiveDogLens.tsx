@@ -14,17 +14,20 @@ type LiveDogLensProps = {
   visionMix: number;
   onVisionMixChange: (value: number) => void;
   onClipChange: (clip: CapturedClip | null) => void;
+  onRecordingChange?: (recording: boolean) => void;
 };
 
 export function LiveDogLens({
   visionMix,
   onVisionMixChange,
   onClipChange,
+  onRecordingChange = () => undefined,
 }: LiveDogLensProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rendererRef = useRef<CanineVisionRenderer | null>(null);
 
   const [detailReduction, setDetailReduction] = useState(12);
+  const [recording, setRecording] = useState(false);
   const [rendererError, setRendererError] = useState<string | null>(
     null,
   );
@@ -58,9 +61,6 @@ export function LiveDogLens({
         videoRef.current,
       );
 
-      renderer.setMix(visionMix / 100);
-      renderer.setDetailReduction(detailReduction / 100);
-      renderer.setMirror(facingMode === "user");
       renderer.start();
 
       rendererRef.current = renderer;
@@ -132,6 +132,11 @@ export function LiveDogLens({
     stopCamera();
   }
 
+  function handleRecordingChange(nextRecording: boolean) {
+    setRecording(nextRecording);
+    onRecordingChange(nextRecording);
+  }
+
   return (
     <div className="camera-card">
       <div className="camera-labels">
@@ -197,6 +202,7 @@ export function LiveDogLens({
               <button
                 className="camera-control-button"
                 type="button"
+                disabled={recording}
                 onClick={handleSwitchCamera}
               >
                 Switch camera
@@ -205,6 +211,7 @@ export function LiveDogLens({
               <button
                 className="camera-control-button"
                 type="button"
+                disabled={recording}
                 onClick={handleStopCamera}
               >
                 Stop
@@ -284,6 +291,7 @@ export function LiveDogLens({
         cameraReady={status === "ready"}
         getStream={getStream}
         onClipChange={onClipChange}
+        onRecordingChange={handleRecordingChange}
       />
     </div>
   );

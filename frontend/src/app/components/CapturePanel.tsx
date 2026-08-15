@@ -17,6 +17,7 @@ type CapturePanelProps = {
   cameraReady: boolean;
   getStream: () => MediaStream | null;
   onClipChange: (clip: CapturedClip | null) => void;
+  onRecordingChange?: (recording: boolean) => void;
 };
 
 function preferredMimeType(): string | undefined {
@@ -41,14 +42,25 @@ function readVideoDuration(file: File): Promise<number> {
   return new Promise((resolve, reject) => {
     const video = document.createElement("video");
     const url = URL.createObjectURL(file);
+    const timeout = window.setTimeout(() => {
+      cleanUp();
+      reject(new Error("Reading the video duration timed out."));
+    }, 10_000);
+
+    function cleanUp() {
+      window.clearTimeout(timeout);
+      video.onloadedmetadata = null;
+      video.onerror = null;
+      URL.revokeObjectURL(url);
+    }
 
     video.preload = "metadata";
 
     video.onloadedmetadata = () => {
       const durationMs = Math.round(video.duration * 1000);
-      URL.revokeObjectURL(url);
+      cleanUp();
 
-      if (!Number.isFinite(durationMs)) {
+      if (!Number.isFinite(durationMs) || durationMs <= 0) {
         reject(new Error("The video duration could not be read."));
         return;
       }
@@ -57,7 +69,7 @@ function readVideoDuration(file: File): Promise<number> {
     };
 
     video.onerror = () => {
-      URL.revokeObjectURL(url);
+      cleanUp();
       reject(new Error("The selected video could not be read."));
     };
 
@@ -69,6 +81,7 @@ export function CapturePanel({
   cameraReady,
   getStream,
   onClipChange,
+  onRecordingChange = () => undefined,
 }: CapturePanelProps) {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -76,6 +89,8 @@ export function CapturePanel({
   const intervalRef = useRef<number | null>(null);
   const stopTimerRef = useRef<number | null>(null);
   const previewUrlRef = useRef<string | null>(null);
+  const mountedRef = useRef(true);
+  const uploadRequestRef = useRef(0);
 
   const [recording, setRecording] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -95,7 +110,16 @@ export function CapturePanel({
     }
   }
 
+  function setRecordingState(nextRecording: boolean) {
+    if (!mountedRef.current) return;
+
+    setRecording(nextRecording);
+    onRecordingChange(nextRecording);
+  }
+
   function publishClip(nextClip: CapturedClip) {
+    if (!mountedRef.current) return;
+
     if (previewUrlRef.current) {
       URL.revokeObjectURL(previewUrlRef.current);
     }
@@ -109,6 +133,8 @@ export function CapturePanel({
   }
 
   function resetClip() {
+    uploadRequestRef.current += 1;
+
     if (previewUrlRef.current) {
       URL.revokeObjectURL(previewUrlRef.current);
       previewUrlRef.current = null;
@@ -131,7 +157,7 @@ export function CapturePanel({
   function startRecording() {
     setErrorMessage("");
 
-    if (!window.MediaRecorder) {
+    if (typeof window.MediaRecorder === "undefined") {
       setErrorMessage(
         "This browser does not support video recording.",
       );
@@ -147,10 +173,20 @@ export function CapturePanel({
 
     resetClip();
 
-    const mimeType = preferredMimeType();
-    const recorder = mimeType
-      ? new MediaRecorder(stream, { mimeType })
-      : new MediaRecorder(stream);
+    let mimeType: string | undefined;
+    let recorder: MediaRecorder;
+
+    try {
+      mimeType = preferredMimeType();
+      recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+    } catch {
+      setErrorMessage(
+        "Video recording could not be started in this browser.",
+      );
+      return;
+    }
 
     recorderRef.current = recorder;
     chunksRef.current = [];
@@ -164,21 +200,33 @@ export function CapturePanel({
 
     recorder.onerror = () => {
       clearTimers();
-      setRecording(false);
+      recorderRef.current = null;
+      recorder.onstop = null;
+
+      if (recorder.state === "recording") {
+        recorder.stop();
+      }
+
+      setRecordingState(false);
       setErrorMessage("Recording failed. Please try again.");
     };
 
     recorder.onstop = () => {
       clearTimers();
-      setRecording(false);
+      recorderRef.current = null;
+
+      if (!mountedRef.current) return;
+
+      setRecordingState(false);
 
       const durationMs = Math.min(
         Math.round(performance.now() - startedAtRef.current),
         MAXIMUM_DURATION_MS,
       );
 
-      const outputType =
+      const recorderType =
         recorder.mimeType || mimeType || "video/webm";
+      const outputType = recorderType.split(";", 1)[0] || "video/webm";
 
       const blob = new Blob(chunksRef.current, {
         type: outputType,
@@ -186,6 +234,16 @@ export function CapturePanel({
 
       if (blob.size === 0) {
         setErrorMessage("The recording did not contain video.");
+        return;
+      }
+
+      if (blob.size > MAXIMUM_FILE_BYTES) {
+        setErrorMessage("The recording exceeded the 30 MB limit.");
+        return;
+      }
+
+      if (durationMs < MINIMUM_DURATION_MS) {
+        setErrorMessage("Record at least five seconds.");
         return;
       }
 
@@ -204,8 +262,21 @@ export function CapturePanel({
       });
     };
 
-    recorder.start(500);
-    setRecording(true);
+    try {
+      recorder.start(500);
+    } catch {
+      recorder.ondataavailable = null;
+      recorder.onerror = null;
+      recorder.onstop = null;
+      recorderRef.current = null;
+      chunksRef.current = [];
+      setErrorMessage(
+        "Video recording could not be started in this browser.",
+      );
+      return;
+    }
+
+    setRecordingState(true);
     setElapsedMs(0);
 
     intervalRef.current = window.setInterval(() => {
@@ -226,12 +297,15 @@ export function CapturePanel({
   async function handleUpload(
     event: ChangeEvent<HTMLInputElement>,
   ) {
+    if (recording) return;
+
     const file = event.target.files?.[0];
     event.target.value = "";
 
     if (!file) return;
 
     resetClip();
+    const requestId = uploadRequestRef.current;
 
     if (
       ![
@@ -255,6 +329,13 @@ export function CapturePanel({
     try {
       const durationMs = await readVideoDuration(file);
 
+      if (
+        !mountedRef.current ||
+        requestId !== uploadRequestRef.current
+      ) {
+        return;
+      }
+
       if (durationMs < MINIMUM_DURATION_MS) {
         setErrorMessage("Choose a clip of at least five seconds.");
         return;
@@ -271,6 +352,13 @@ export function CapturePanel({
         source: "upload",
       });
     } catch (error) {
+      if (
+        !mountedRef.current ||
+        requestId !== uploadRequestRef.current
+      ) {
+        return;
+      }
+
       setErrorMessage(
         error instanceof Error
           ? error.message
@@ -280,11 +368,24 @@ export function CapturePanel({
   }
 
   useEffect(() => {
+    mountedRef.current = true;
+
     return () => {
+      mountedRef.current = false;
+      uploadRequestRef.current += 1;
       clearTimers();
 
-      if (recorderRef.current?.state === "recording") {
-        recorderRef.current.stop();
+      const recorder = recorderRef.current;
+      recorderRef.current = null;
+
+      if (recorder) {
+        recorder.ondataavailable = null;
+        recorder.onerror = null;
+        recorder.onstop = null;
+
+        if (recorder.state === "recording") {
+          recorder.stop();
+        }
       }
 
       if (previewUrlRef.current) {
@@ -334,10 +435,18 @@ export function CapturePanel({
           </button>
         )}
 
-        <label className="secondary-button upload-button">
+        <label
+          className={[
+            "secondary-button",
+            "upload-button",
+            recording ? "disabled" : "",
+          ].join(" ")}
+          aria-disabled={recording}
+        >
           Upload clip
           <input
             type="file"
+            disabled={recording}
             accept="video/mp4,video/webm,video/quicktime,video/x-matroska"
             onChange={(event) => void handleUpload(event)}
           />

@@ -1,5 +1,6 @@
 import base64
 import json
+import logging
 from pathlib import Path
 from typing import Literal
 
@@ -24,6 +25,9 @@ DEMO_RESPONSE_PATH = (
 )
 
 AnalysisSource = Literal["gemini", "demo"]
+MAXIMUM_INLINE_VIDEO_BYTES = 20 * 1024 * 1024
+
+logger = logging.getLogger(__name__)
 
 
 class SceneAnalysisError(RuntimeError):
@@ -65,16 +69,25 @@ def analyze_video(
             "demo",
         )
 
-    if not settings.gemini_api_key:
-        raise SceneAnalysisError(
-            "GEMINI_API_KEY is not configured.",
-        )
-
-    client = genai.Client(
-        api_key=settings.gemini_api_key,
-    )
+    client = None
 
     try:
+        if not settings.gemini_api_key:
+            raise SceneAnalysisError(
+                "GEMINI_API_KEY is not configured.",
+            )
+
+        video_size = video_path.stat().st_size
+
+        if video_size > MAXIMUM_INLINE_VIDEO_BYTES:
+            raise SceneAnalysisError(
+                "The normalized video exceeds Gemini's inline limit.",
+            )
+
+        client = genai.Client(
+            api_key=settings.gemini_api_key,
+        )
+
         prompt_template = PROMPT_PATH.read_text(
             encoding="utf-8",
         )
@@ -131,6 +144,8 @@ def analyze_video(
         return analysis, "gemini"
 
     except Exception as error:
+        logger.exception("Gemini scene analysis failed")
+
         if settings.allow_demo_fallback:
             return (
                 load_demo_analysis(
@@ -148,4 +163,5 @@ def analyze_video(
         ) from error
 
     finally:
-        client.close()
+        if client is not None:
+            client.close()
