@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo } from "react";
 
 import type {
   StoryReelResult,
@@ -10,6 +10,7 @@ type StoryReelProps = {
   dogName: string;
   result: StoryReelResult | null;
   isRendering: boolean;
+  progress: number;
   error: string | null;
   disabled: boolean;
   onRender: () => void;
@@ -19,27 +20,29 @@ export function StoryReel({
   dogName,
   result,
   isRendering,
+  progress,
   error,
   disabled,
   onRender,
 }: StoryReelProps) {
-  const [videoUrl, setVideoUrl] = useState("");
+
+  const videoUrl = useMemo(
+    () =>
+      result
+        ? URL.createObjectURL(result.video)
+        : "",
+    [result],
+  );
 
   useEffect(() => {
-    if (!result) {
+    if (!videoUrl) {
       return;
     }
 
-    const nextUrl = URL.createObjectURL(result.video);
-    const updateId = window.setTimeout(() => {
-      setVideoUrl(nextUrl);
-    }, 0);
-
     return () => {
-      window.clearTimeout(updateId);
-      URL.revokeObjectURL(nextUrl);
+      URL.revokeObjectURL(videoUrl);
     };
-  }, [result]);
+  }, [videoUrl]);
 
   return (
     <div className="story-reel">
@@ -60,6 +63,35 @@ export function StoryReel({
               ? "Creating Story Reel…"
               : "Create Story Reel"}
           </button>
+        </div>
+      )}
+
+      {isRendering && (
+        <div className="story-progress">
+          <div
+            className="story-progress-track"
+            role="progressbar"
+            aria-label="Story Reel progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progress}
+          >
+            <span
+              style={{
+                width: `${Math.max(4, progress)}%`,
+              }}
+            />
+          </div>
+
+          <p>
+            {progress < 30
+              ? "Preparing the video…"
+              : progress < 50
+                ? "Writing the grounded story…"
+                : progress < 65
+                  ? "Creating the fictional voice…"
+                  : "Composing the vertical reel…"}
+          </p>
         </div>
       )}
 

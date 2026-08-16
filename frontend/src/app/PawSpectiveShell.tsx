@@ -134,6 +134,8 @@ export function PawSpectiveShell({
     isRenderingStory,
     setIsRenderingStory,
   ] = useState(false);
+  const [storyProgress, setStoryProgress] =
+    useState(0);
 
   const storyRequestIdRef = useRef(0);
   const storyAbortControllerRef =
@@ -145,6 +147,7 @@ export function PawSpectiveShell({
     storyAbortControllerRef.current = null;
 
     setIsRenderingStory(false);
+    setStoryProgress(0);
     setStoryResult(null);
     setStoryError(null);
   }
@@ -425,6 +428,7 @@ export function PawSpectiveShell({
       abortController;
 
     setIsRenderingStory(true);
+    setStoryProgress(0);
     setStoryResult(null);
     setStoryError(null);
 
@@ -450,6 +454,7 @@ export function PawSpectiveShell({
               profile.favorite,
           },
           abortController.signal,
+          setStoryProgress,
         );
 
       if (
@@ -1396,6 +1401,7 @@ export function PawSpectiveShell({
                 isRendering={
                   isRenderingStory
                 }
+                progress={storyProgress}
                 error={storyError}
                 disabled={
                   analysisSource !==

@@ -1770,6 +1770,37 @@ footer p {
   text-decoration: none;
 }
 
+.story-progress {
+  display: grid;
+  gap: 0.65rem;
+  width: 100%;
+}
+
+.story-progress p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.story-progress-track {
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(23, 34, 27, 0.12);
+}
+
+.story-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background:
+    linear-gradient(
+      90deg,
+      var(--green),
+      var(--lime)
+    );
+  transition: width 300ms ease;
+}
+
 @media (max-width: 680px) {
   .story-reel-actions {
     align-items: stretch;

@@ -88,3 +88,23 @@ export type StoryReelResult = {
   video: Blob;
   source: StoryReelSource;
 };
+
+export type StoryJobCreateResponse = {
+  job_id: string;
+  status: "queued";
+  status_url: string;
+};
+
+export type StoryJobStatusResponse = {
+  job_id: string;
+  status:
+    | "queued"
+    | "running"
+    | "completed"
+    | "failed"
+    | "expired";
+  progress: number;
+  error: string | null;
+  story_source: StoryReelSource | null;
+  download_url: string | null;
+};

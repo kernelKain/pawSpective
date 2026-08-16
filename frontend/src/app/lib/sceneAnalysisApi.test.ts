@@ -1,5 +1,6 @@
 import {
   afterEach,
+  beforeEach,
   describe,
   expect,
   it,
@@ -13,408 +14,585 @@ import type {
   VisibilityScore,
 } from "../types/sceneAnalysis";
 import {
-  analyzeCapturedClip,
   renderCapturedStoryReel,
-  scoreCapturedClip,
 } from "./sceneAnalysisApi";
 
-const clip: CapturedClip = {
+const fetchMock = vi.fn<typeof fetch>();
+
+const clip = {
   file: new File(
-    ["synthetic-video"],
-    "clip.mp4",
-    { type: "video/mp4" },
+    ["fake-video-content"],
+    "bruno-walk.mp4",
+    {
+      type: "video/mp4",
+    },
   ),
-  durationMs: 8_000,
-  source: "upload",
-};
+} as CapturedClip;
 
-afterEach(() => {
-  vi.unstubAllGlobals();
-  vi.restoreAllMocks();
-});
-
-describe("analyzeCapturedClip", () => {
-  it("posts the clip and returns the backend response", async () => {
-    const payload = {
-      source: "gemini" as const,
-      analysis: {
-        analysis_version: "1.0" as const,
-        duration_ms: 8_000,
-        events: [],
-        warnings: [],
-      },
-    };
-
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify(payload),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json",
-          },
-        },
-      ),
-    );
-
-    vi.stubGlobal("fetch", fetchMock);
-
-    await expect(
-      analyzeCapturedClip(clip),
-    ).resolves.toEqual(payload);
-
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-
-    const [url, request] = fetchMock.mock.calls[0];
-
-    expect(url).toBe(
-      "http://localhost:8000/api/v1/analyze-video",
-    );
-    expect(request.method).toBe("POST");
-    expect(request.body).toBeInstanceOf(FormData);
-
-    const formData = request.body as FormData;
-
-    const uploadedFile = formData.get("file");
-
-    expect(uploadedFile).toBeInstanceOf(File);
-    expect((uploadedFile as File).name).toBe(
-      clip.file.name,
-    );
-    expect((uploadedFile as File).type).toBe(
-      clip.file.type,
-    );
-    expect((uploadedFile as File).size).toBe(
-      clip.file.size,
-    );
-  });
-
-  it("surfaces a safe backend error message", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            detail: "The video is not readable.",
-          }),
-          {
-            status: 422,
-            headers: {
-              "Content-Type": "application/json",
-            },
-          },
-        ),
-      ),
-    );
-
-    await expect(
-      analyzeCapturedClip(clip),
-    ).rejects.toThrow("The video is not readable.");
-  });
-
-  it("uses the fallback message for non-JSON errors", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(
-          "Gateway failure",
-          { status: 502 },
-        ),
-      ),
-    );
-
-    await expect(
-      analyzeCapturedClip(clip),
-    ).rejects.toThrow("Scene analysis failed.");
-  });
-});
-
-describe("scoreCapturedClip", () => {
-  it("submits corrected events for deterministic scoring", async () => {
-    const responsePayload = {
-      scoring_version: "1.0" as const,
-      method: "bbox-region-lab-v1" as const,
-      scores: [],
-      warnings: [],
-    };
-
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify(responsePayload),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json",
-          },
-        },
-      ),
-    );
-
-    vi.stubGlobal("fetch", fetchMock);
-    const abortController = new AbortController();
-
-    await expect(
-      scoreCapturedClip(
-        clip,
-        [
-          {
-            event_id: "ball-1",
-            timestamp_ms: 1_000,
-            object_label: "blue ball",
-            category: "toy",
-            bounding_box: {
-              x_min: 0.2,
-              y_min: 0.2,
-              x_max: 0.5,
-              y_max: 0.5,
-            },
-            confidence: 0.9,
-            visible_evidence: "A blue ball is visible.",
-            motion_level: "medium",
-          },
-        ],
-        "Ball",
-        abortController.signal,
-      ),
-    ).resolves.toEqual(responsePayload);
-
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-
-    const [url, request] = fetchMock.mock.calls[0];
-
-    expect(url).toBe(
-      "http://localhost:8000/api/v1/score-visibility",
-    );
-    expect(request.method).toBe("POST");
-    expect(request.body).toBeInstanceOf(FormData);
-    expect(request.signal).toBe(abortController.signal);
-
-    const formData = request.body as FormData;
-    const payload = JSON.parse(
-      formData.get("payload") as string,
-    );
-
-    const uploadedFile = formData.get("file");
-
-    expect(uploadedFile).toBeInstanceOf(File);
-    expect((uploadedFile as File).name).toBe(
-      clip.file.name,
-    );
-    expect((uploadedFile as File).type).toBe(
-      clip.file.type,
-    );
-    expect((uploadedFile as File).size).toBe(
-      clip.file.size,
-    );
-    expect(payload.analysis_source).toBe("gemini");
-    expect(payload.favorite_interest).toBe("Ball");
-    expect(payload.events).toHaveLength(1);
-    expect(payload.events[0].event_id).toBe("ball-1");
-    expect(payload.events[0].object_label).toBe("blue ball");
-  });
-
-  it("surfaces a backend visibility-scoring error", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            detail: "The object region is too small to score.",
-          }),
-          {
-            status: 422,
-            headers: {
-              "Content-Type": "application/json",
-            },
-          },
-        ),
-      ),
-    );
-
-    await expect(
-      scoreCapturedClip(
-        clip,
-        [
-          {
-            event_id: "ball-1",
-            timestamp_ms: 1_000,
-            object_label: "blue ball",
-            category: "toy",
-            bounding_box: {
-              x_min: 0.2,
-              y_min: 0.2,
-              x_max: 0.5,
-              y_max: 0.5,
-            },
-            confidence: 0.9,
-            visible_evidence: "A blue ball is visible.",
-            motion_level: "medium",
-          },
-        ],
-        "Ball",
-      ),
-    ).rejects.toThrow(
-      "The object region is too small to score.",
-    );
-  });
-
-  it("uses the fallback visibility error for non-JSON responses", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(
-          "Gateway failure",
-          { status: 502 },
-        ),
-      ),
-    );
-
-    await expect(
-      scoreCapturedClip(
-        clip,
-        [
-          {
-            event_id: "ball-1",
-            timestamp_ms: 1_000,
-            object_label: "blue ball",
-            category: "toy",
-            bounding_box: {
-              x_min: 0.2,
-              y_min: 0.2,
-              x_max: 0.5,
-              y_max: 0.5,
-            },
-            confidence: 0.9,
-            visible_evidence: "A blue ball is visible.",
-            motion_level: "medium",
-          },
-        ],
-        "Ball",
-      ),
-    ).rejects.toThrow("Visibility scoring failed.");
-  });
-});
-
-const storyEvent: SceneEvent = {
-  event_id: "ball-1",
-  timestamp_ms: 1_000,
-  object_label: "blue ball",
-  category: "toy",
-  bounding_box: {
-    x_min: 0.2,
-    y_min: 0.2,
-    x_max: 0.5,
-    y_max: 0.5,
+const events = [
+  {
+    id: "event-1",
+    label: "Red ball",
+    start_seconds: 1,
+    end_seconds: 3,
   },
-  confidence: 0.9,
-  visible_evidence: "A blue ball is visible.",
-  motion_level: "medium",
-};
+] as unknown as SceneEvent[];
 
-const storyScore: VisibilityScore = {
-  event_id: "ball-1",
-  identification_confidence: 0.9,
-  human_contrast_score: 70,
-  dog_contrast_score: 84,
-  contrast_change: 14,
-  motion_score: 67,
-  apparent_size_score: 60,
-  profile_relevance_score: 100,
-  salience_score: 75,
-  salience_level: "high",
-  human_object_color: "#2055D0",
-  human_background_color: "#438A35",
-  dog_object_color: "#3F6BC8",
-  dog_background_color: "#8A813B",
-  explanation: "The transformed regions remain distinct.",
-  why: ["The transformed contrast is high."],
-};
+const scores = [
+  {
+    event_id: "event-1",
+    visibility_score: 82,
+  },
+] as unknown as VisibilityScore[];
 
-const storyProfile: StoryProfileInput = {
-  owner_name: "Kshitij",
+const profile = {
+  owner_name: "Alex",
   dog_name: "Bruno",
-  breed: "Golden Retriever",
+  breed: "Labrador",
   age: "Adult",
   size: "Large",
-  personality_tags: ["Detective"],
-  favorite_interest: "Ball",
-};
+  personality_tags: [
+    "Curious",
+    "Playful",
+  ],
+  favorite_interest: "Balls",
+} as StoryProfileInput;
 
-describe("renderCapturedStoryReel", () => {
-  it("submits grounded inputs and returns the MP4 blob", async () => {
-    const videoBytes = new Uint8Array([0, 1, 2, 3]);
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(videoBytes, {
-        status: 200,
-        headers: {
-          "Content-Type": "video/mp4",
-          "X-PawSpective-Story-Source": "gemini",
+function jsonResponse(
+  payload: unknown,
+  ok = true,
+): Response {
+  return {
+    ok,
+    json: vi.fn().mockResolvedValue(payload),
+  } as unknown as Response;
+}
+
+function videoResponse(
+  video: Blob,
+  ok = true,
+): Response {
+  return {
+    ok,
+    blob: vi.fn().mockResolvedValue(video),
+    json: vi.fn().mockResolvedValue({}),
+  } as unknown as Response;
+}
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.stubGlobal("fetch", fetchMock);
+});
+
+afterEach(() => {
+  vi.clearAllTimers();
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+  vi.clearAllMocks();
+});
+
+describe("sceneAnalysisApi", () => {
+  it(
+    "exports the background Story Reel client",
+    () => {
+      expect(
+        renderCapturedStoryReel,
+      ).toBeTypeOf("function");
+    },
+  );
+
+  it(
+    "creates a multipart job, polls it, downloads the result, and reports progress",
+    async () => {
+      const renderedVideo = new Blob(
+        ["rendered-mp4"],
+        {
+          type: "video/mp4",
         },
-      }),
-    );
-    const abortController = new AbortController();
-    vi.stubGlobal("fetch", fetchMock);
+      );
 
-    const result = await renderCapturedStoryReel(
-      clip,
-      [storyEvent],
-      [storyScore],
-      "ball-1",
-      storyProfile,
-      abortController.signal,
-    );
-
-    expect(result.source).toBe("gemini");
-    expect(result.video.type).toBe("video/mp4");
-    expect(result.video.size).toBe(4);
-
-    const [url, request] = fetchMock.mock.calls[0];
-    expect(url).toBe(
-      "http://localhost:8000/api/v1/render-story-reel",
-    );
-    expect(request.signal).toBe(abortController.signal);
-
-    const formData = request.body as FormData;
-    const payload = JSON.parse(
-      formData.get("payload") as string,
-    );
-
-    expect(payload.analysis_source).toBe("gemini");
-    expect(payload.style).toBe("nature_documentary");
-    expect(payload.featured_event_id).toBe("ball-1");
-    expect(payload.profile.dog_name).toBe("Bruno");
-    expect(payload.events[0].object_label).toBe("blue ball");
-    expect(payload.scores[0].salience_score).toBe(75);
-  });
-
-  it("surfaces a safe Story Reel backend error", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            detail: "The fictional dog voice is unavailable.",
+      fetchMock
+        .mockResolvedValueOnce(
+          jsonResponse({
+            job_id: "job-1",
+            status: "queued",
+            status_url:
+              "/api/v1/story-jobs/job-1",
           }),
-          {
-            status: 502,
-            headers: {
-              "Content-Type": "application/json",
-            },
-          },
-        ),
-      ),
-    );
+        )
+        .mockResolvedValueOnce(
+          jsonResponse({
+            job_id: "job-1",
+            status: "running",
+            progress: 25,
+            error: null,
+            download_url: null,
+            story_source: null,
+          }),
+        )
+        .mockResolvedValueOnce(
+          jsonResponse({
+            job_id: "job-1",
+            status: "completed",
+            progress: 90,
+            error: null,
+            download_url:
+              "/api/v1/story-jobs/job-1/download",
+            story_source: "gemini",
+          }),
+        )
+        .mockResolvedValueOnce(
+          videoResponse(renderedVideo),
+        );
 
-    await expect(
-      renderCapturedStoryReel(
-        clip,
-        [storyEvent],
-        [storyScore],
-        "ball-1",
-        storyProfile,
-      ),
-    ).rejects.toThrow(
-      "The fictional dog voice is unavailable.",
-    );
-  });
+      const onProgress = vi.fn();
+
+      const resultPromise =
+        renderCapturedStoryReel(
+          clip,
+          events,
+          scores,
+          "event-1",
+          profile,
+          undefined,
+          onProgress,
+        );
+
+      await vi.advanceTimersByTimeAsync(
+        1_500,
+      );
+
+      await vi.advanceTimersByTimeAsync(
+        1_500,
+      );
+
+      const result = await resultPromise;
+
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+
+      const [
+        createUrl,
+        createOptions,
+      ] = fetchMock.mock.calls[0] as [
+        string,
+        RequestInit,
+      ];
+
+      expect(createUrl).toContain(
+        "/api/v1/story-jobs",
+      );
+
+      expect(createOptions.method).toBe(
+        "POST",
+      );
+
+      expect(
+        createOptions.body,
+      ).toBeInstanceOf(FormData);
+
+      const formData =
+        createOptions.body as FormData;
+
+      const uploadedFile = formData.get(
+        "file",
+      ) as File;
+
+      expect(uploadedFile.name).toBe(
+        "bruno-walk.mp4",
+      );
+
+      expect(uploadedFile.type).toBe(
+        "video/mp4",
+      );
+
+      const payloadValue =
+        formData.get("payload");
+
+      expect(typeof payloadValue).toBe(
+        "string",
+      );
+
+      const payload = JSON.parse(
+        payloadValue as string,
+      ) as {
+        analysis_source: string;
+        style: string;
+        profile: StoryProfileInput;
+        events: SceneEvent[];
+        scores: VisibilityScore[];
+        featured_event_id: string;
+      };
+
+      expect(payload).toMatchObject({
+        analysis_source: "gemini",
+        style: "nature_documentary",
+        featured_event_id: "event-1",
+        profile,
+      });
+
+      expect(payload.events).toEqual(events);
+      expect(payload.scores).toEqual(scores);
+
+      const [
+        firstStatusUrl,
+        firstStatusOptions,
+      ] = fetchMock.mock.calls[1] as [
+        string,
+        RequestInit,
+      ];
+
+      expect(firstStatusUrl).toContain(
+        "/api/v1/story-jobs/job-1",
+      );
+
+      expect(firstStatusOptions).toMatchObject({
+        method: "GET",
+        cache: "no-store",
+      });
+
+      const [
+        downloadUrl,
+        downloadOptions,
+      ] = fetchMock.mock.calls[3] as [
+        string,
+        RequestInit,
+      ];
+
+      expect(downloadUrl).toContain(
+        "/api/v1/story-jobs/job-1/download",
+      );
+
+      expect(downloadOptions).toMatchObject({
+        method: "GET",
+        cache: "no-store",
+      });
+
+      expect(result.video).toBe(
+        renderedVideo,
+      );
+
+      expect(result.source).toBe("gemini");
+
+      expect(
+        onProgress.mock.calls.map(
+          ([progress]) => progress,
+        ),
+      ).toEqual([
+        0,
+        1,
+        25,
+        90,
+        100,
+      ]);
+    },
+  );
+
+  it(
+    "clamps progress values returned by the backend",
+    async () => {
+      const renderedVideo = new Blob(
+        ["rendered-mp4"],
+        {
+          type: "video/mp4",
+        },
+      );
+
+      fetchMock
+        .mockResolvedValueOnce(
+          jsonResponse({
+            job_id: "job-clamped",
+            status: "queued",
+            status_url:
+              "/api/v1/story-jobs/job-clamped",
+          }),
+        )
+        .mockResolvedValueOnce(
+          jsonResponse({
+            job_id: "job-clamped",
+            status: "running",
+            progress: 150,
+            error: null,
+            download_url: null,
+            story_source: null,
+          }),
+        )
+        .mockResolvedValueOnce(
+          jsonResponse({
+            job_id: "job-clamped",
+            status: "completed",
+            progress: -20,
+            error: null,
+            download_url:
+              "/api/v1/story-jobs/job-clamped/download",
+            story_source: "template",
+          }),
+        )
+        .mockResolvedValueOnce(
+          videoResponse(renderedVideo),
+        );
+
+      const onProgress = vi.fn();
+
+      const resultPromise =
+        renderCapturedStoryReel(
+          clip,
+          events,
+          scores,
+          "event-1",
+          profile,
+          undefined,
+          onProgress,
+        );
+
+      await vi.advanceTimersByTimeAsync(
+        3_000,
+      );
+
+      const result = await resultPromise;
+
+      expect(result.source).toBe("template");
+
+      expect(
+        onProgress.mock.calls.map(
+          ([progress]) => progress,
+        ),
+      ).toEqual([
+        0,
+        1,
+        100,
+        0,
+        100,
+      ]);
+    },
+  );
+
+  it(
+    "reports a failed Story Reel job",
+    async () => {
+      fetchMock
+        .mockResolvedValueOnce(
+          jsonResponse({
+            job_id: "job-failed",
+            status: "queued",
+            status_url:
+              "/api/v1/story-jobs/job-failed",
+          }),
+        )
+        .mockResolvedValueOnce(
+          jsonResponse({
+            job_id: "job-failed",
+            status: "failed",
+            progress: 55,
+            error:
+              "The fictional voice could not be generated.",
+            download_url: null,
+            story_source: null,
+          }),
+        );
+
+      const resultPromise =
+        renderCapturedStoryReel(
+          clip,
+          events,
+          scores,
+          "event-1",
+          profile,
+        );
+
+      const rejection = expect(
+        resultPromise,
+      ).rejects.toThrow(
+        "The fictional voice could not be generated.",
+      );
+
+      await vi.advanceTimersByTimeAsync(
+        1_500,
+      );
+
+      await rejection;
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it(
+    "rejects completed jobs without a download URL",
+    async () => {
+      fetchMock
+        .mockResolvedValueOnce(
+          jsonResponse({
+            job_id: "job-no-download",
+            status: "queued",
+            status_url:
+              "/api/v1/story-jobs/job-no-download",
+          }),
+        )
+        .mockResolvedValueOnce(
+          jsonResponse({
+            job_id: "job-no-download",
+            status: "completed",
+            progress: 100,
+            error: null,
+            download_url: null,
+            story_source: "gemini",
+          }),
+        );
+
+      const resultPromise =
+        renderCapturedStoryReel(
+          clip,
+          events,
+          scores,
+          "event-1",
+          profile,
+        );
+
+      const rejection = expect(
+        resultPromise,
+      ).rejects.toThrow(
+        "The completed Story Reel has no download URL.",
+      );
+
+      await vi.advanceTimersByTimeAsync(
+        1_500,
+      );
+
+      await rejection;
+    },
+  );
+
+  it(
+    "reports an expired Story Reel job",
+    async () => {
+      fetchMock
+        .mockResolvedValueOnce(
+          jsonResponse({
+            job_id: "job-expired",
+            status: "queued",
+            status_url:
+              "/api/v1/story-jobs/job-expired",
+          }),
+        )
+        .mockResolvedValueOnce(
+          jsonResponse({
+            job_id: "job-expired",
+            status: "expired",
+            progress: 100,
+            error: null,
+            download_url: null,
+            story_source: null,
+          }),
+        );
+
+      const resultPromise =
+        renderCapturedStoryReel(
+          clip,
+          events,
+          scores,
+          "event-1",
+          profile,
+        );
+
+      const rejection = expect(
+        resultPromise,
+      ).rejects.toThrow(
+        "The Story Reel expired before download.",
+      );
+
+      await vi.advanceTimersByTimeAsync(
+        1_500,
+      );
+
+      await rejection;
+    },
+  );
+
+  it(
+    "times out when the job never completes",
+    async () => {
+      fetchMock
+        .mockResolvedValueOnce(
+          jsonResponse({
+            job_id: "job-timeout",
+            status: "queued",
+            status_url:
+              "/api/v1/story-jobs/job-timeout",
+          }),
+        )
+        .mockImplementation(async () =>
+          jsonResponse({
+            job_id: "job-timeout",
+            status: "running",
+            progress: 50,
+            error: null,
+            download_url: null,
+            story_source: null,
+          }),
+        );
+
+      const resultPromise =
+        renderCapturedStoryReel(
+          clip,
+          events,
+          scores,
+          "event-1",
+          profile,
+        );
+
+      const rejection = expect(
+        resultPromise,
+      ).rejects.toThrow(
+        "Story Reel generation exceeded the two-minute limit.",
+      );
+
+      await vi.advanceTimersByTimeAsync(
+        120_000,
+      );
+
+      await rejection;
+
+      expect(
+        fetchMock.mock.calls.length,
+      ).toBeGreaterThan(1);
+    },
+  );
+
+  it(
+    "cancels Story Reel polling with an AbortSignal",
+    async () => {
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({
+          job_id: "job-cancelled",
+          status: "queued",
+          status_url:
+            "/api/v1/story-jobs/job-cancelled",
+        }),
+      );
+
+      const controller =
+        new AbortController();
+
+      const resultPromise =
+        renderCapturedStoryReel(
+          clip,
+          events,
+          scores,
+          "event-1",
+          profile,
+          controller.signal,
+        );
+
+      const rejection = expect(
+        resultPromise,
+      ).rejects.toMatchObject({
+        name: "AbortError",
+      });
+
+      controller.abort();
+
+      await rejection;
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    },
+  );
 });

@@ -223,3 +223,33 @@ class StoryReelRequest(StrictModel):
             )
 
         return self
+
+class StoryJobCreateResponse(StrictModel):
+    job_id: str = Field(
+        pattern=r"^[a-f0-9]{32}$",
+    )
+    status: Literal["queued"]
+    status_url: str
+
+
+class StoryJobStatusResponse(StrictModel):
+    job_id: str = Field(
+        pattern=r"^[a-f0-9]{32}$",
+    )
+    status: Literal[
+        "queued",
+        "running",
+        "completed",
+        "failed",
+        "expired",
+    ]
+    progress: int = Field(ge=0, le=100)
+    error: str | None = Field(
+        default=None,
+        max_length=240,
+    )
+    story_source: Literal[
+        "gemini",
+        "template",
+    ] | None = None
+    download_url: str | None = None

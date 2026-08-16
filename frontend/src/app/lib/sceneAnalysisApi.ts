@@ -2,6 +2,8 @@ import type {
   AnalyzeVideoResponse,
   CapturedClip,
   SceneEvent,
+  StoryJobCreateResponse,
+  StoryJobStatusResponse,
   StoryProfileInput,
   StoryReelResult,
   VisibilityAnalysisResponse,
@@ -27,17 +29,65 @@ async function readApiError(
       message = payload.detail;
     }
   } catch {
-    // Retain the safe fallback.
+    // Retain the safe fallback message.
   }
 
   return new Error(message);
+}
+
+function wait(
+  milliseconds: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(
+        new DOMException(
+          "The request was aborted.",
+          "AbortError",
+        ),
+      );
+      return;
+    }
+
+    const handleAbort = () => {
+      window.clearTimeout(timeout);
+
+      reject(
+        new DOMException(
+          "The request was aborted.",
+          "AbortError",
+        ),
+      );
+    };
+
+    const timeout = window.setTimeout(() => {
+      signal?.removeEventListener(
+        "abort",
+        handleAbort,
+      );
+
+      resolve();
+    }, milliseconds);
+
+    signal?.addEventListener(
+      "abort",
+      handleAbort,
+      { once: true },
+    );
+  });
 }
 
 export async function analyzeCapturedClip(
   clip: CapturedClip,
 ): Promise<AnalyzeVideoResponse> {
   const formData = new FormData();
-  formData.append("file", clip.file, clip.file.name);
+
+  formData.append(
+    "file",
+    clip.file,
+    clip.file.name,
+  );
 
   const response = await fetch(
     `${API_BASE_URL}/api/v1/analyze-video`,
@@ -54,7 +104,9 @@ export async function analyzeCapturedClip(
     );
   }
 
-  return (await response.json()) as AnalyzeVideoResponse;
+  return (
+    await response.json()
+  ) as AnalyzeVideoResponse;
 }
 
 export async function scoreCapturedClip(
@@ -65,7 +117,12 @@ export async function scoreCapturedClip(
 ): Promise<VisibilityAnalysisResponse> {
   const formData = new FormData();
 
-  formData.append("file", clip.file, clip.file.name);
+  formData.append(
+    "file",
+    clip.file,
+    clip.file.name,
+  );
+
   formData.append(
     "payload",
     JSON.stringify({
@@ -91,7 +148,9 @@ export async function scoreCapturedClip(
     );
   }
 
-  return (await response.json()) as VisibilityAnalysisResponse;
+  return (
+    await response.json()
+  ) as VisibilityAnalysisResponse;
 }
 
 export async function renderCapturedStoryReel(
@@ -101,10 +160,16 @@ export async function renderCapturedStoryReel(
   featuredEventId: string,
   profile: StoryProfileInput,
   signal?: AbortSignal,
+  onProgress?: (progress: number) => void,
 ): Promise<StoryReelResult> {
   const formData = new FormData();
 
-  formData.append("file", clip.file, clip.file.name);
+  formData.append(
+    "file",
+    clip.file,
+    clip.file.name,
+  );
+
   formData.append(
     "payload",
     JSON.stringify({
@@ -117,8 +182,10 @@ export async function renderCapturedStoryReel(
     }),
   );
 
-  const response = await fetch(
-    `${API_BASE_URL}/api/v1/render-story-reel`,
+  onProgress?.(0);
+
+  const createResponse = await fetch(
+    `${API_BASE_URL}/api/v1/story-jobs`,
     {
       method: "POST",
       body: formData,
@@ -126,22 +193,100 @@ export async function renderCapturedStoryReel(
     },
   );
 
-  if (!response.ok) {
+  if (!createResponse.ok) {
     throw await readApiError(
-      response,
-      "Story Reel generation failed.",
+      createResponse,
+      "Story Reel generation could not be started.",
     );
   }
 
-  const sourceHeader = response.headers.get(
-    "X-PawSpective-Story-Source",
-  );
+  const created =
+    (await createResponse.json()) as StoryJobCreateResponse;
 
-  return {
-    video: await response.blob(),
-    source:
-      sourceHeader === "gemini"
-        ? "gemini"
-        : "template",
-  };
+  onProgress?.(1);
+
+  const deadline = Date.now() + 120_000;
+
+  while (Date.now() < deadline) {
+    await wait(1_500, signal);
+
+    const statusResponse = await fetch(
+      `${API_BASE_URL}${created.status_url}`,
+      {
+        method: "GET",
+        cache: "no-store",
+        signal,
+      },
+    );
+
+    if (!statusResponse.ok) {
+      throw await readApiError(
+        statusResponse,
+        "Story Reel status could not be read.",
+      );
+    }
+
+    const status =
+      (await statusResponse.json()) as StoryJobStatusResponse;
+
+    const normalizedProgress = Math.min(
+      100,
+      Math.max(0, status.progress),
+    );
+
+    onProgress?.(normalizedProgress);
+
+    if (status.status === "failed") {
+      throw new Error(
+        status.error ??
+          "Story Reel generation failed.",
+      );
+    }
+
+    if (status.status === "expired") {
+      throw new Error(
+        "The Story Reel expired before download.",
+      );
+    }
+
+    if (status.status === "completed") {
+      if (!status.download_url) {
+        throw new Error(
+          "The completed Story Reel has no download URL.",
+        );
+      }
+
+      const downloadResponse = await fetch(
+        `${API_BASE_URL}${status.download_url}`,
+        {
+          method: "GET",
+          cache: "no-store",
+          signal,
+        },
+      );
+
+      if (!downloadResponse.ok) {
+        throw await readApiError(
+          downloadResponse,
+          "Story Reel download failed.",
+        );
+      }
+
+      const video = await downloadResponse.blob();
+
+      onProgress?.(100);
+
+      return {
+        video,
+        source:
+          status.story_source === "gemini"
+            ? "gemini"
+            : "template",
+      };
+    }
+  }
+
+  throw new Error(
+    "Story Reel generation exceeded the two-minute limit.",
+  );
 }

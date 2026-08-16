@@ -45,6 +45,12 @@ class Settings:
     elevenlabs_dog_voice_id: str
     elevenlabs_model_id: str
 
+    jobs_directory: Path
+    job_database: Path
+    job_ttl_seconds: int
+    max_concurrent_story_jobs: int
+    story_jobs_per_hour: int
+
 
 settings = Settings(
     gemini_api_key=os.getenv("GEMINI_API_KEY", ""),
@@ -83,6 +89,45 @@ settings = Settings(
     elevenlabs_model_id=os.getenv(
         "ELEVENLABS_MODEL_ID",
         "eleven_flash_v2_5",
+    ),
+        jobs_directory=Path(
+        os.getenv(
+            "PAWSPECTIVE_JOBS_DIRECTORY",
+            "media/jobs",
+        ),
+    ),
+    job_database=Path(
+        os.getenv(
+            "PAWSPECTIVE_JOB_DATABASE",
+            "media/jobs.sqlite3",
+        ),
+    ),
+    job_ttl_seconds=max(
+        300,
+        int(
+            os.getenv(
+                "PAWSPECTIVE_JOB_TTL_SECONDS",
+                "3600",
+            ),
+        ),
+    ),
+    max_concurrent_story_jobs=max(
+        1,
+        int(
+            os.getenv(
+                "PAWSPECTIVE_MAX_CONCURRENT_STORY_JOBS",
+                "1",
+            ),
+        ),
+    ),
+    story_jobs_per_hour=max(
+        1,
+        int(
+            os.getenv(
+                "PAWSPECTIVE_STORY_JOBS_PER_HOUR",
+                "5",
+            ),
+        ),
     ),
     cors_origins=env_origins(),
 )
