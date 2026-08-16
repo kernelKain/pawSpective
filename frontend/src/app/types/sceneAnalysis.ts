@@ -28,15 +28,17 @@ export type SceneAnalysis = {
   warnings: string[];
 };
 
+export type AnalysisSource = "gemini" | "demo" | "controlled_demo";
+
 export type AnalyzeVideoResponse = {
   analysis: SceneAnalysis;
-  source: "gemini" | "demo";
+  source: AnalysisSource;
 };
 
 export type CapturedClip = {
   file: File;
   durationMs: number;
-  source: "recording" | "upload";
+  source: "recording" | "upload" | "controlled_demo";
 };
 
 export type SalienceLevel = "low" | "medium" | "high";
@@ -118,7 +120,7 @@ export type StoryProfileInput = {
   favorite_interest: string;
 };
 
-export type StoryReelSource = "gemini" | "template";
+export type StoryReelSource = "gemini" | "template" | "demo_cache";
 
 export type StoryReelResult = {
   video: Blob;
@@ -143,4 +145,16 @@ export type StoryJobStatusResponse = {
   error: string | null;
   story_source: StoryReelSource | null;
   download_url: string | null;
+};
+
+export type ControlledDemoStatus = {
+  available: boolean;
+  duration_ms: number | null;
+  clip_url: string | null;
+  profile: StoryProfileInput | null;
+};
+
+export type ControlledDemoBundle = {
+  clip: CapturedClip;
+  profile: StoryProfileInput;
 };

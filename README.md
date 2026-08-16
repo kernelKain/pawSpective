@@ -4,7 +4,7 @@ See the world closer to how your dog sees it. PawSpective combines a
 canine-vision approximation, AI-supported scene analysis, user-reviewed
 objects, curiosity mapping, and downloadable narrated Story Reels.
 
-## Phase 7 capabilities
+## Phase 8 capabilities
 
 - Live camera with a Human/Dog Vision comparison control.
 - Five-to-fifteen-second browser recording or MP4, WebM, MOV, and MKV upload.
@@ -35,6 +35,11 @@ objects, curiosity mapping, and downloadable narrated Story Reels.
   H.264/AAC Story Reels.
 - Human View, canine-vision transition, Curiosity Map overlays, subtitles,
   visibility result card, accuracy disclaimer, preview and MP4 download.
+- SHA-256-bound controlled-demo analysis and event provenance.
+- Cached narration and completed Story Reel playback without venue internet.
+- Dark-footage and zero-object warnings with camera/upload recovery paths.
+- A controlled rehearsal workflow documented in
+  `docs/phase-8-demo-rehearsal.md`.
 
 ## Prerequisites
 

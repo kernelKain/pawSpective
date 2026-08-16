@@ -77,6 +77,53 @@ def test_pipeline_renders_downloadable_mp4(
     assert progress == [10, 30, 50, 65, 95]
 
 
+def test_matching_controlled_request_bypasses_voice_and_rendering(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    source_path = tmp_path / "source.mp4"
+    source_path.write_bytes(b"verified demo")
+    request = story_request().model_copy(
+        update={"analysis_source": "controlled_demo"}
+    )
+    progress: list[int] = []
+
+    monkeypatch.setattr(pipeline_module, "probe_duration_ms", lambda _: 8_000)
+    monkeypatch.setattr(
+        pipeline_module.demo_cache,
+        "matches_story_request",
+        lambda _: True,
+    )
+    monkeypatch.setattr(
+        pipeline_module.demo_cache,
+        "require_matching_clip",
+        lambda _: None,
+    )
+    monkeypatch.setattr(
+        pipeline_module.demo_cache,
+        "validate_events",
+        lambda _: None,
+    )
+    monkeypatch.setattr(
+        pipeline_module.demo_cache,
+        "copy_reel_to",
+        lambda destination: destination.write_bytes(b"cached reel"),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "synthesize_narration",
+        lambda *args: (_ for _ in ()).throw(
+            VoiceGenerationError("ElevenLabs timed out")
+        ),
+    )
+
+    result = run_story_pipeline(source_path, request, tmp_path, progress.append)
+
+    assert result.story_source == "demo_cache"
+    assert result.output_path.read_bytes() == b"cached reel"
+    assert progress == [10, 95]
+
+
 @pytest.mark.parametrize(
     ("duration_ms", "message"),
     [

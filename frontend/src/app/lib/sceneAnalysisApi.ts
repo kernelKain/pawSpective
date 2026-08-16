@@ -1,7 +1,10 @@
 import type {
+  AnalysisSource,
   AnalyzeVideoResponse,
   CapturedClip,
   ColorSimulationResponse,
+  ControlledDemoBundle,
+  ControlledDemoStatus,
   SceneEvent,
   StoryJobCreateResponse,
   StoryJobStatusResponse,
@@ -110,11 +113,61 @@ export async function analyzeCapturedClip(
   ) as AnalyzeVideoResponse;
 }
 
+export async function loadControlledDemo(): Promise<ControlledDemoBundle> {
+  const statusResponse = await fetch(
+    `${API_BASE_URL}/api/v1/demo/status`,
+    { method: "GET", cache: "no-store" },
+  );
+
+  if (!statusResponse.ok) {
+    throw await readApiError(
+      statusResponse,
+      "The rehearsal demo status is unavailable.",
+    );
+  }
+
+  const status = (await statusResponse.json()) as ControlledDemoStatus;
+
+  if (
+    !status.available ||
+    !status.clip_url ||
+    !status.duration_ms ||
+    !status.profile
+  ) {
+    throw new Error(
+      "The controlled rehearsal demo has not been built on this server.",
+    );
+  }
+
+  const clipResponse = await fetch(`${API_BASE_URL}${status.clip_url}`);
+
+  if (!clipResponse.ok) {
+    throw await readApiError(
+      clipResponse,
+      "The rehearsal demo clip is unavailable.",
+    );
+  }
+
+  const video = await clipResponse.blob();
+
+  return {
+    clip: {
+      file: new File([video], "controlled-demo.mp4", {
+        type: "video/mp4",
+      }),
+      durationMs: status.duration_ms,
+      source: "controlled_demo",
+    },
+    profile: status.profile,
+  };
+}
+
 export async function scoreCapturedClip(
   clip: CapturedClip,
   events: SceneEvent[],
   favoriteInterest: string,
   signal?: AbortSignal,
+  analysisSource: AnalysisSource = "gemini",
 ): Promise<VisibilityAnalysisResponse> {
   const formData = new FormData();
 
@@ -127,7 +180,10 @@ export async function scoreCapturedClip(
   formData.append(
     "payload",
     JSON.stringify({
-      analysis_source: "gemini",
+      analysis_source:
+        analysisSource === "controlled_demo"
+          ? "controlled_demo"
+          : "gemini",
       events,
       favorite_interest: favoriteInterest,
     }),
@@ -158,6 +214,7 @@ export async function simulateCapturedObjectColors(
   clip: CapturedClip,
   event: SceneEvent,
   signal?: AbortSignal,
+  analysisSource: AnalysisSource = "gemini",
 ): Promise<ColorSimulationResponse> {
   const formData = new FormData();
 
@@ -165,7 +222,10 @@ export async function simulateCapturedObjectColors(
   formData.append(
     "payload",
     JSON.stringify({
-      analysis_source: "gemini",
+      analysis_source:
+        analysisSource === "controlled_demo"
+          ? "controlled_demo"
+          : "gemini",
       event: {
         ...event,
         object_label: event.object_label.trim(),
@@ -200,6 +260,7 @@ export async function renderCapturedStoryReel(
   profile: StoryProfileInput,
   signal?: AbortSignal,
   onProgress?: (progress: number) => void,
+  analysisSource: AnalysisSource = "gemini",
 ): Promise<StoryReelResult> {
   const formData = new FormData();
 
@@ -212,7 +273,10 @@ export async function renderCapturedStoryReel(
   formData.append(
     "payload",
     JSON.stringify({
-      analysis_source: "gemini",
+      analysis_source:
+        analysisSource === "controlled_demo"
+          ? "controlled_demo"
+          : "gemini",
       style: "nature_documentary",
       profile,
       events,
@@ -317,10 +381,7 @@ export async function renderCapturedStoryReel(
 
       return {
         video,
-        source:
-          status.story_source === "gemini"
-            ? "gemini"
-            : "template",
+        source: status.story_source ?? "template",
       };
     }
   }

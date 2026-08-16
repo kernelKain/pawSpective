@@ -1472,6 +1472,61 @@ footer p {
   background: #fff0ed;
 }
 
+.demo-backup-card,
+.controlled-demo-notice,
+.empty-analysis-card {
+  padding: 18px;
+  border: 1px solid rgba(66, 111, 71, 0.22);
+  border-radius: 16px;
+  background: rgba(223, 255, 119, 0.13);
+}
+
+.demo-backup-card {
+  display: grid;
+  gap: 10px;
+}
+
+.demo-backup-card p,
+.controlled-demo-notice,
+.empty-analysis-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.demo-backup-card .secondary-button {
+  width: 100%;
+}
+
+.controlled-demo-notice {
+  margin-bottom: 18px;
+  border-color: rgba(49, 105, 148, 0.28);
+  background: rgba(118, 166, 201, 0.14);
+}
+
+.camera-upload-fallback {
+  padding: 10px 12px;
+  border: 1px solid rgba(190, 235, 171, 0.24);
+  border-radius: 12px;
+  background: rgba(70, 106, 72, 0.26);
+}
+
+.empty-analysis-card {
+  display: grid;
+  gap: 14px;
+  justify-items: start;
+}
+
+.empty-analysis-card h2 {
+  margin: 0;
+}
+
+.empty-analysis-card > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .primary-button:disabled {
   cursor: not-allowed;
   opacity: 0.5;

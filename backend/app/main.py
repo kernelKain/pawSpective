@@ -22,6 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ValidationError
 
+from backend.app import demo_cache
 from backend.app.analysis import (
     SceneAnalysisError,
     analyze_video,
@@ -34,12 +35,15 @@ from backend.app.contracts import (
     ColorSimulationRequest,
     ColorSimulationResponse,
     SceneAnalysisResponse,
+    SceneEvent,
     StoryJobCreateResponse,
     StoryJobStatusResponse,
+    StoryProfile,
     StoryReelRequest,
     VisibilityAnalysisResponse,
     VisibilityScoreRequest,
 )
+from backend.app.demo_cache import DemoCacheError
 from backend.app.job_store import JobStore
 from backend.app.media import (
     ALLOWED_VIDEO_TYPES,
@@ -55,11 +59,49 @@ from backend.app.visibility import (
     VisibilityScoringError,
     score_visibility_events,
 )
+from backend.app.video_quality import (
+    VideoQualityError,
+    assess_video_quality,
+)
 
 
 class AnalyzeVideoResponse(BaseModel):
     analysis: SceneAnalysisResponse
-    source: Literal["gemini", "demo"]
+    source: Literal["gemini", "demo", "controlled_demo"]
+
+
+class ControlledDemoStatus(BaseModel):
+    available: bool
+    duration_ms: int | None = None
+    clip_url: str | None = None
+    profile: StoryProfile | None = None
+
+
+DEMO_PROFILE_PATH = Path(__file__).resolve().parents[2] / "demo-profile.json"
+
+
+def load_demo_profile() -> StoryProfile | None:
+    try:
+        return StoryProfile.model_validate_json(
+            DEMO_PROFILE_PATH.read_text(encoding="utf-8")
+        )
+    except (OSError, ValidationError):
+        return None
+
+
+def prepare_video_for_source(
+    source_path: Path,
+    normalized_path: Path,
+    analysis_source: str,
+    events: list[SceneEvent],
+) -> None:
+    if analysis_source == "controlled_demo":
+        demo_cache.require_matching_clip(source_path)
+        demo_cache.validate_events(events)
+        demo_cache.copy_clip_to(normalized_path)
+        return
+
+    normalize_video(source_path, normalized_path)
 
 
 logger = logging.getLogger("uvicorn.error")
@@ -99,7 +141,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title="PawSpective API",
-    version="0.7.0",
+    version="0.8.0",
     lifespan=lifespan,
 )
 
@@ -198,6 +240,41 @@ def liveness() -> dict[str, str]:
     }
 
 
+@app.get(
+    "/api/v1/demo/status",
+    response_model=ControlledDemoStatus,
+)
+def controlled_demo_status() -> ControlledDemoStatus:
+    if not demo_cache.available():
+        return ControlledDemoStatus(available=False)
+
+    cache_manifest = demo_cache.manifest()
+    duration_ms = cache_manifest.get("duration_ms")
+
+    return ControlledDemoStatus(
+        available=True,
+        duration_ms=duration_ms if isinstance(duration_ms, int) else None,
+        clip_url="/api/v1/demo/clip",
+        profile=load_demo_profile(),
+    )
+
+
+@app.get("/api/v1/demo/clip")
+def controlled_demo_clip() -> FileResponse:
+    if not demo_cache.available():
+        raise HTTPException(
+            status_code=404,
+            detail="The controlled demo cache is unavailable.",
+        )
+
+    return FileResponse(
+        demo_cache.cache_path(demo_cache.CLIP_FILENAME),
+        media_type="video/mp4",
+        filename=demo_cache.CLIP_FILENAME,
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
 @app.get("/api/v1/health/ready")
 def readiness() -> dict[str, object]:
     problems: list[str] = []
@@ -211,6 +288,9 @@ def readiness() -> dict[str, object]:
         problems.append(
             "FFprobe is unavailable",
         )
+
+    if settings.controlled_demo_enabled and not demo_cache.available():
+        problems.append("The controlled demo cache is incomplete")
 
     if not settings.demo_mode:
         if not settings.gemini_api_key:
@@ -342,19 +422,63 @@ async def analyze_uploaded_video(
                     f"{settings.max_video_duration_seconds} seconds.",
                 )
 
-            await asyncio.to_thread(
-                normalize_video,
+            is_controlled_demo = await asyncio.to_thread(
+                demo_cache.matches_clip,
                 source_path,
-                normalized_path,
             )
+
+            if is_controlled_demo:
+                await asyncio.to_thread(
+                    demo_cache.copy_clip_to,
+                    normalized_path,
+                )
+                controlled_fallback = await asyncio.to_thread(
+                    demo_cache.analysis,
+                )
+            else:
+                await asyncio.to_thread(
+                    normalize_video,
+                    source_path,
+                    normalized_path,
+                )
+                controlled_fallback = None
+
+            try:
+                quality = await asyncio.to_thread(
+                    assess_video_quality,
+                    normalized_path,
+                )
+                quality_warnings = quality.warnings
+            except VideoQualityError:
+                logger.warning("Video quality inspection was unavailable")
+                quality_warnings = []
 
             analysis_started_at = perf_counter()
 
-            analysis, source = await asyncio.to_thread(
-                analyze_video,
-                normalized_path,
-                duration_ms,
-            )
+            if controlled_fallback is None:
+                analysis, source = await asyncio.to_thread(
+                    analyze_video,
+                    normalized_path,
+                    duration_ms,
+                )
+            else:
+                analysis, source = await asyncio.to_thread(
+                    analyze_video,
+                    normalized_path,
+                    duration_ms,
+                    controlled_fallback,
+                )
+
+            analysis.warnings = [
+                *analysis.warnings,
+                *quality_warnings,
+            ][-10:]
+
+            if not analysis.events:
+                analysis.warnings = [
+                    *analysis.warnings,
+                    "No useful visible objects were detected. Try a brighter, steadier clip or use the rehearsal demo.",
+                ][-10:]
 
             logger.info(
                 "Gemini scene analysis completed in %.2f seconds",
@@ -366,7 +490,10 @@ async def analyze_uploaded_video(
                 source=source,
             )
 
-    except MediaValidationError as error:
+    except (
+        MediaValidationError,
+        DemoCacheError,
+    ) as error:
         raise HTTPException(
             status_code=422,
             detail=str(error),
@@ -456,9 +583,11 @@ async def score_video_visibility(
                 )
 
             await asyncio.to_thread(
-                normalize_video,
+                prepare_video_for_source,
                 source_path,
                 normalized_path,
+                request.analysis_source,
+                request.events,
             )
 
             return await asyncio.to_thread(
@@ -471,6 +600,7 @@ async def score_video_visibility(
 
     except (
         MediaValidationError,
+        DemoCacheError,
         VisibilityScoringError,
     ) as error:
         raise HTTPException(
@@ -535,9 +665,11 @@ async def simulate_uploaded_object_colors(
                 )
 
             await asyncio.to_thread(
-                normalize_video,
+                prepare_video_for_source,
                 source_path,
                 normalized_path,
+                simulation_request.analysis_source,
+                [simulation_request.event],
             )
 
             return await asyncio.to_thread(
@@ -546,7 +678,11 @@ async def simulate_uploaded_object_colors(
                 simulation_request.event,
                 duration_ms,
             )
-    except (MediaValidationError, ColorSimulationError) as error:
+    except (
+        MediaValidationError,
+        DemoCacheError,
+        ColorSimulationError,
+    ) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
 
@@ -639,6 +775,16 @@ async def create_story_job(
             settings.max_upload_bytes,
         )
 
+        if story_request.analysis_source == "controlled_demo":
+            await asyncio.to_thread(
+                demo_cache.require_matching_clip,
+                source_path,
+            )
+            await asyncio.to_thread(
+                demo_cache.validate_events,
+                story_request.events,
+            )
+
         job_store.create(
             job_id,
             filename,
@@ -650,7 +796,7 @@ async def create_story_job(
             story_request,
         )
 
-    except MediaValidationError as error:
+    except (MediaValidationError, DemoCacheError) as error:
         job_store.delete(job_id)
 
         shutil.rmtree(

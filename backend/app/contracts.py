@@ -97,7 +97,7 @@ class SalienceLevel(str, Enum):
 class VisibilityScoreRequest(StrictModel):
     # Demo boxes belong to the cached example and must not be scored against
     # an unrelated uploaded video.
-    analysis_source: Literal["gemini"]
+    analysis_source: Literal["gemini", "controlled_demo"]
     events: list[SceneEvent] = Field(min_length=1, max_length=12)
     favorite_interest: str = Field(default="", max_length=40)
 
@@ -154,7 +154,7 @@ ToyColorId = Literal[
 
 class ColorSimulationRequest(StrictModel):
     # Cached demo boxes must never be applied to an unrelated clip.
-    analysis_source: Literal["gemini"]
+    analysis_source: Literal["gemini", "controlled_demo"]
     event: SceneEvent
 
 
@@ -235,7 +235,7 @@ class StoryScriptResponse(StrictModel):
 
 
 class StoryReelRequest(StrictModel):
-    analysis_source: Literal["gemini"]
+    analysis_source: Literal["gemini", "controlled_demo"]
     style: Literal["nature_documentary"] = "nature_documentary"
     profile: StoryProfile
     events: list[SceneEvent] = Field(min_length=1, max_length=12)
@@ -299,5 +299,6 @@ class StoryJobStatusResponse(StrictModel):
     story_source: Literal[
         "gemini",
         "template",
+        "demo_cache",
     ] | None = None
     download_url: str | None = None

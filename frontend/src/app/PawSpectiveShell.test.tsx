@@ -270,7 +270,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("PawSpectiveShell Phase 7 flow", () => {
+describe("PawSpectiveShell Phase 8 flow", () => {
   it("labels demo fallback, supports corrections, and blocks scoring", async () => {
     await reachResults("demo");
 
@@ -549,6 +549,7 @@ describe("PawSpectiveShell Phase 7 flow", () => {
       expect.anything(),
       expect.objectContaining({ event_id: "ball" }),
       expect.any(AbortSignal),
+      "gemini",
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Select tree" }));
@@ -603,5 +604,34 @@ describe("PawSpectiveShell Phase 7 flow", () => {
     await waitFor(() => {
       expect(screen.queryByText("Recommended color: yellow")).toBeNull();
     });
+  });
+
+  it("offers retry and rehearsal recovery when no objects are detected", async () => {
+    mockedAnalyze.mockResolvedValue({
+      source: "gemini",
+      analysis: {
+        analysis_version: "1.0",
+        duration_ms: 8_000,
+        events: [],
+        warnings: ["No useful visible objects were detected."],
+      },
+    });
+    reachLens();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Analyze captured moment" }),
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "No useful visible objects detected",
+      }),
+    ).toBeDefined();
+    expect(
+      screen.getByRole("button", { name: "Try another clip" }),
+    ).toBeDefined();
+    expect(
+      screen.getByRole("button", { name: "Use controlled demo" }),
+    ).toBeDefined();
   });
 });

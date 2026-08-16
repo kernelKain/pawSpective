@@ -14,6 +14,7 @@ import type {
   VisibilityScore,
 } from "../types/sceneAnalysis";
 import {
+  loadControlledDemo,
   renderCapturedStoryReel,
   simulateCapturedObjectColors,
 } from "./sceneAnalysisApi";
@@ -109,6 +110,28 @@ afterEach(() => {
 });
 
 describe("sceneAnalysisApi", () => {
+  it("loads the verified controlled demo bundle", async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          available: true,
+          duration_ms: 8_000,
+          clip_url: "/api/v1/demo/clip",
+          profile,
+        }),
+      )
+      .mockResolvedValueOnce(
+        videoResponse(new Blob(["demo"], { type: "video/mp4" })),
+      );
+
+    const demo = await loadControlledDemo();
+
+    expect(demo.clip.source).toBe("controlled_demo");
+    expect(demo.clip.durationMs).toBe(8_000);
+    expect(demo.clip.file.name).toBe("controlled-demo.mp4");
+    expect(demo.profile.dog_name).toBe("Bruno");
+  });
+
   it(
     "exports the background Story Reel client",
     () => {

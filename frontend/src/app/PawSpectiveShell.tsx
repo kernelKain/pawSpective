@@ -10,11 +10,13 @@ import { ToyColorLab } from "./components/ToyColorLab";
 import { VisibilityInsight } from "./components/VisibilityInsight";
 import {
   analyzeCapturedClip,
+  loadControlledDemo,
   renderCapturedStoryReel,
   scoreCapturedClip,
   simulateCapturedObjectColors,
 } from "./lib/sceneAnalysisApi";
 import type {
+  AnalysisSource,
   CapturedClip,
   ColorSimulationResponse,
   SceneEvent,
@@ -103,9 +105,9 @@ export function PawSpectiveShell({
   const [analysisError, setAnalysisError] =
     useState<string | null>(null);
   const [analysisSource, setAnalysisSource] =
-    useState<"gemini" | "demo" | null>(
-      null,
-    );
+    useState<AnalysisSource | null>(null);
+  const [analysisWarnings, setAnalysisWarnings] = useState<string[]>([]);
+  const [isLoadingDemo, setIsLoadingDemo] = useState(false);
   const [isRecording, setIsRecording] =
     useState(false);
 
@@ -287,6 +289,11 @@ export function PawSpectiveShell({
     clip: CapturedClip | null,
   ) {
     setCapturedClip(clip);
+    setAnalysisError(null);
+    setAnalysisWarnings([]);
+    setAnalysisSource(null);
+    setEvents([]);
+    setSelectedEventId("");
     invalidateVisibilityScores();
   }
 
@@ -298,12 +305,10 @@ export function PawSpectiveShell({
     setSelectedEventId(eventId);
   }
 
-  async function beginSceneAnalysis() {
-    if (!capturedClip) {
-      return;
-    }
-
+  async function analyzeClip(clip: CapturedClip) {
+    setCapturedClip(clip);
     setAnalysisError(null);
+    setAnalysisWarnings([]);
     setAnalysisSource(null);
     setStage("processing");
 
@@ -312,7 +317,7 @@ export function PawSpectiveShell({
     try {
       const response =
         await analyzeCapturedClip(
-          capturedClip,
+          clip,
         );
 
       setEvents(response.analysis.events);
@@ -321,6 +326,7 @@ export function PawSpectiveShell({
           ?.event_id ?? "",
       );
       setAnalysisSource(response.source);
+      setAnalysisWarnings(response.analysis.warnings);
       setStage("results");
     } catch (error) {
       setAnalysisError(
@@ -332,6 +338,43 @@ export function PawSpectiveShell({
     }
   }
 
+  async function beginSceneAnalysis() {
+    if (capturedClip) {
+      await analyzeClip(capturedClip);
+    }
+  }
+
+  async function beginControlledDemo() {
+    setIsLoadingDemo(true);
+    setAnalysisError(null);
+
+    try {
+      const demo = await loadControlledDemo();
+
+      setProfile({
+        ownerName: demo.profile.owner_name,
+        dogName: demo.profile.dog_name,
+        breed: demo.profile.breed,
+        age: demo.profile.age,
+        size: demo.profile.size,
+        personalities: demo.profile.personality_tags,
+        favorite: demo.profile.favorite_interest,
+        photo: "",
+      });
+
+      await analyzeClip(demo.clip);
+    } catch (error) {
+      setAnalysisError(
+        error instanceof Error
+          ? error.message
+          : "The rehearsal demo could not be loaded.",
+      );
+      setStage("lens");
+    } finally {
+      setIsLoadingDemo(false);
+    }
+  }
+
   async function calculateVisibility() {
     if (
       !capturedClip ||
@@ -340,7 +383,10 @@ export function PawSpectiveShell({
       return;
     }
 
-    if (analysisSource !== "gemini") {
+    if (
+      analysisSource !== "gemini" &&
+      analysisSource !== "controlled_demo"
+    ) {
       setVisibilityError(
         "Cached demo detections cannot be measured against this video. Run real Gemini analysis first.",
       );
@@ -377,6 +423,7 @@ export function PawSpectiveShell({
           })),
           profile.favorite,
           abortController.signal,
+          analysisSource,
         );
 
       if (
@@ -393,6 +440,20 @@ export function PawSpectiveShell({
       setVisibilityWarnings(
         response.warnings,
       );
+
+      if (analysisSource === "controlled_demo") {
+        const featured = response.scores.reduce(
+          (best, score) =>
+            !best || score.dog_contrast_score > best.dog_contrast_score
+              ? score
+              : best,
+          response.scores[0],
+        );
+
+        if (featured) {
+          setSelectedEventId(featured.event_id);
+        }
+      }
     } catch (error) {
       if (
         requestId !==
@@ -424,7 +485,8 @@ export function PawSpectiveShell({
   async function createStoryReel() {
     if (
       !capturedClip ||
-      analysisSource !== "gemini" ||
+      (analysisSource !== "gemini" &&
+        analysisSource !== "controlled_demo") ||
       visibilityScores.length === 0 ||
       !selectedEventId
     ) {
@@ -485,6 +547,7 @@ export function PawSpectiveShell({
           },
           abortController.signal,
           setStoryProgress,
+          analysisSource,
         );
 
       if (
@@ -528,7 +591,8 @@ export function PawSpectiveShell({
     if (
       !capturedClip ||
       !selectedEvent ||
-      analysisSource !== "gemini"
+      (analysisSource !== "gemini" &&
+        analysisSource !== "controlled_demo")
     ) {
       return;
     }
@@ -560,6 +624,7 @@ export function PawSpectiveShell({
         capturedClip,
         selectedEvent,
         abortController.signal,
+        analysisSource,
       );
 
       if (
@@ -691,7 +756,7 @@ export function PawSpectiveShell({
 
         <div className="topbar-actions">
           <span className="phase-badge">
-            Phase 7 · Toy Color Lab
+            Phase 8 · Reliable demo
           </span>
 
           <button
@@ -1221,6 +1286,7 @@ export function PawSpectiveShell({
                 setCapturedClip(null);
                 setAnalysisError(null);
                 setAnalysisSource(null);
+                setAnalysisWarnings([]);
                 setEvents([]);
                 setSelectedEventId("");
                 invalidateVisibilityScores();
@@ -1240,7 +1306,50 @@ export function PawSpectiveShell({
             </div>
           )}
 
-          <div className="results-grid">
+          {analysisSource === "controlled_demo" && (
+            <div className="controlled-demo-notice">
+              Rehearsal mode is using the exact SHA-256-verified controlled
+              clip and its cached analysis provenance. Renaming labels is
+              allowed; geometry and visible evidence remain locked.
+            </div>
+          )}
+
+          {analysisWarnings.length > 0 && (
+            <div className="score-warnings" role="status">
+              {analysisWarnings.map((warning) => (
+                <p key={warning}>{warning}</p>
+              ))}
+            </div>
+          )}
+
+          {events.length === 0 && (
+            <section className="empty-analysis-card">
+              <h2>No useful visible objects detected</h2>
+              <p>
+                Try a brighter, steadier 5–15 second clip, or use the
+                controlled rehearsal so the demonstration can continue.
+              </p>
+              <div>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => setStage("lens")}
+                >
+                  Try another clip
+                </button>
+                <button
+                  className="primary-button"
+                  type="button"
+                  disabled={isLoadingDemo}
+                  onClick={() => void beginControlledDemo()}
+                >
+                  Use controlled demo
+                </button>
+              </div>
+            </section>
+          )}
+
+          {events.length > 0 && <div className="results-grid">
             <section className="result-card object-review">
               <div className="card-heading">
                 <div>
@@ -1364,8 +1473,8 @@ export function PawSpectiveShell({
                 disabled={
                   isResultsBusy ||
                   events.length === 0 ||
-                  analysisSource !==
-                    "gemini"
+                  (analysisSource !== "gemini" &&
+                    analysisSource !== "controlled_demo")
                 }
                 onClick={() =>
                   void calculateVisibility()
@@ -1490,6 +1599,24 @@ export function PawSpectiveShell({
                 {colorSimulation && <span>Fixed six-color palette</span>}
               </div>
 
+              <div className="demo-backup-card">
+                <strong>Rehearsal recovery</strong>
+                <p>
+                  Load the verified clip, analysis, profile, audio, and reel
+                  when venue connectivity is unreliable.
+                </p>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  disabled={isLoadingDemo || isRecording || isResultsBusy}
+                  onClick={() => void beginControlledDemo()}
+                >
+                  {isLoadingDemo
+                    ? "Loading rehearsal…"
+                    : "Use controlled demo"}
+                </button>
+              </div>
+
               {capturedClip && selectedEvent ? (
                 <ToyColorLab
                   clip={capturedClip}
@@ -1498,7 +1625,8 @@ export function PawSpectiveShell({
                   isLoading={isSimulatingColor}
                   error={colorSimulationError}
                   disabled={
-                    analysisSource !== "gemini" ||
+                    (analysisSource !== "gemini" &&
+                      analysisSource !== "controlled_demo") ||
                     !selectedVisibilityScore ||
                     isScoring ||
                     isRenderingStory
@@ -1534,8 +1662,8 @@ export function PawSpectiveShell({
                 progress={storyProgress}
                 error={storyError}
                 disabled={
-                  analysisSource !==
-                    "gemini" ||
+                  (analysisSource !== "gemini" &&
+                    analysisSource !== "controlled_demo") ||
                   visibilityScores.length ===
                     0 ||
                   isScoring ||
@@ -1546,7 +1674,7 @@ export function PawSpectiveShell({
                 }
               />
             </section>
-          </div>
+          </div>}
         </section>
       )}
 

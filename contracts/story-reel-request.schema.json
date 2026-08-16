@@ -305,7 +305,10 @@
   "additionalProperties": false,
   "properties": {
     "analysis_source": {
-      "const": "gemini",
+      "enum": [
+        "gemini",
+        "controlled_demo"
+      ],
       "title": "Analysis Source",
       "type": "string"
     },

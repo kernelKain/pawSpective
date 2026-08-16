@@ -183,6 +183,15 @@ export function LiveDogLens({
               {cameraMessage}
             </p>
 
+            {(status === "denied" ||
+              status === "unavailable" ||
+              status === "error") && (
+              <p className="camera-upload-fallback">
+                Camera access is not required. Use the upload control below
+                to continue with an existing portrait or landscape clip.
+              </p>
+            )}
+
             <button
               className="primary-button"
               type="button"

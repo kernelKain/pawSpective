@@ -24,7 +24,7 @@ DEMO_RESPONSE_PATH = (
     / "scene-analysis.example.json"
 )
 
-AnalysisSource = Literal["gemini", "demo"]
+AnalysisSource = Literal["gemini", "demo", "controlled_demo"]
 MAXIMUM_INLINE_VIDEO_BYTES = 20 * 1024 * 1024
 
 logger = logging.getLogger(__name__)
@@ -59,8 +59,15 @@ def load_demo_analysis(
 def analyze_video(
     video_path: Path,
     duration_ms: int,
+    controlled_fallback: SceneAnalysisResponse | None = None,
 ) -> tuple[SceneAnalysisResponse, AnalysisSource]:
     if settings.demo_mode:
+        if controlled_fallback is not None:
+            controlled_fallback.warnings.append(
+                "Demo mode is enabled; the verified controlled-demo analysis was used."
+            )
+            return controlled_fallback, "controlled_demo"
+
         return (
             load_demo_analysis(
                 duration_ms,
@@ -145,6 +152,12 @@ def analyze_video(
 
     except Exception as error:
         logger.exception("Gemini scene analysis failed")
+
+        if controlled_fallback is not None:
+            controlled_fallback.warnings.append(
+                "Gemini was unavailable; the verified controlled-demo analysis was used."
+            )
+            return controlled_fallback, "controlled_demo"
 
         if settings.allow_demo_fallback:
             return (

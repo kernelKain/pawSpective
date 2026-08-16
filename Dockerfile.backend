@@ -25,6 +25,8 @@ RUN python -m pip install \
 COPY backend ./backend
 COPY examples ./examples
 COPY contracts ./contracts
+COPY demo-profile.json ./demo-profile.json
+COPY demo_cache ./demo_cache
 
 RUN mkdir -p /data/media /data/jobs \
     && chown -R pawspective:pawspective /data /app

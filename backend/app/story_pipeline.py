@@ -3,6 +3,8 @@ from pathlib import Path
 from typing import Callable
 
 from backend.app.contracts import StoryReelRequest
+from backend.app import demo_cache
+from backend.app.demo_cache import DemoCacheError
 from backend.app.media import (
     MediaValidationError,
     normalize_video,
@@ -79,6 +81,20 @@ def run_story_pipeline(
             "Story event timestamps exceed the video duration.",
         )
 
+    if (
+        request.analysis_source == "controlled_demo"
+        and demo_cache.matches_story_request(request)
+    ):
+        demo_cache.require_matching_clip(source_path)
+        demo_cache.validate_events(request.events)
+        demo_cache.copy_reel_to(output_path)
+        progress(95)
+
+        return StoryPipelineResult(
+            output_path=output_path,
+            story_source="demo_cache",
+        )
+
     normalize_video(
         source_path,
         normalized_path,
@@ -116,6 +132,7 @@ def run_story_pipeline(
 
 
 PIPELINE_ERRORS = (
+    DemoCacheError,
     MediaValidationError,
     StoryGenerationError,
     VoiceGenerationError,

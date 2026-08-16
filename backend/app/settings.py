@@ -36,6 +36,8 @@ class Settings:
     gemini_model: str
     demo_mode: bool
     allow_demo_fallback: bool
+    controlled_demo_enabled: bool
+    demo_cache_directory: Path
     media_directory: Path
     max_video_duration_seconds: int
     max_upload_bytes: int
@@ -62,6 +64,16 @@ settings = Settings(
     allow_demo_fallback=env_bool(
         "PAWSPECTIVE_ALLOW_DEMO_FALLBACK",
         True,
+    ),
+    controlled_demo_enabled=env_bool(
+        "PAWSPECTIVE_CONTROLLED_DEMO_ENABLED",
+        True,
+    ),
+    demo_cache_directory=Path(
+        os.getenv(
+            "PAWSPECTIVE_DEMO_CACHE_DIRECTORY",
+            "demo_cache",
+        ),
     ),
     media_directory=Path(
         os.getenv("PAWSPECTIVE_MEDIA_DIRECTORY", "media"),

@@ -1,0 +1,9 @@
+{
+  "owner_name": "Demo handler",
+  "dog_name": "Scout",
+  "breed": "Mixed breed",
+  "age": "Adult",
+  "size": "Medium",
+  "personality_tags": ["Curious", "Athlete"],
+  "favorite_interest": "Ball"
+}

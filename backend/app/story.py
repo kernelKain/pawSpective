@@ -19,7 +19,7 @@ PROMPT_PATH = (
     / "story_reel.txt"
 )
 
-StorySource = Literal["gemini", "template"]
+StorySource = Literal["gemini", "template", "demo_cache"]
 
 logger = logging.getLogger(__name__)
 

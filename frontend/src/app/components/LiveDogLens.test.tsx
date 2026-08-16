@@ -176,4 +176,25 @@ describe("LiveDogLens", () => {
       screen.getByRole("button", { name: "Close camera" }).className,
     ).toContain("secondary-button");
   });
+
+  it("keeps upload recovery visible when camera permission is denied", () => {
+    cameraStatus = "denied";
+    mockedUseCamera.mockImplementation(() => ({
+      videoRef,
+      status: cameraStatus,
+      errorMessage: "Camera permission was denied.",
+      facingMode,
+      startCamera,
+      switchCamera,
+      stopCamera,
+      getStream,
+    }));
+
+    render(<LensHarness />);
+
+    expect(
+      screen.getByText(/Camera access is not required/),
+    ).toBeDefined();
+    expect(screen.getByText("Upload clip")).toBeDefined();
+  });
 });

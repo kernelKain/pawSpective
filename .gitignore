@@ -15,6 +15,7 @@ htmlcov/
 media/
 generated/
 temp/
+demo-source/*.mp4
 
 # Frontend
 frontend/node_modules/

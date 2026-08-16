@@ -10,6 +10,7 @@ from backend.app.analysis import (
     MAXIMUM_INLINE_VIDEO_BYTES,
     SceneAnalysisError,
     analyze_video,
+    load_demo_analysis,
 )
 
 
@@ -150,6 +151,40 @@ def test_invalid_gemini_response_uses_fallback_and_closes_client(
     assert source == "demo"
     assert result.events
     assert client.closed
+
+
+def test_malformed_gemini_uses_verified_controlled_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure(monkeypatch)
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.interactions = SimpleNamespace(
+                create=lambda **kwargs: SimpleNamespace(
+                    output_text='{"unexpected": true}',
+                ),
+            )
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(
+        analysis_module.genai,
+        "Client",
+        lambda **kwargs: FakeClient(),
+    )
+    controlled = load_demo_analysis(8_000)
+    result, source = analyze_video(
+        write_video(tmp_path),
+        8_000,
+        controlled,
+    )
+
+    assert source == "controlled_demo"
+    assert result.events
+    assert any("verified controlled-demo" in item for item in result.warnings)
 
 
 def test_oversized_inline_video_never_calls_gemini(
