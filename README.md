@@ -4,7 +4,7 @@ See the world closer to how your dog sees it. PawSpective combines a
 canine-vision approximation, AI-supported scene analysis, user-reviewed
 objects, curiosity mapping, and downloadable narrated Story Reels.
 
-## Phase 5 capabilities
+## Phase 7 capabilities
 
 - Live camera with a Human/Dog Vision comparison control.
 - Five-to-fifteen-second browser recording or MP4, WebM, MOV, and MKV upload.
@@ -19,6 +19,12 @@ objects, curiosity mapping, and downloadable narrated Story Reels.
   measured contrast, apparent size, and a capped profile bonus.
 - A real-video Curiosity Map with timestamp seeking and aligned bounding boxes.
 - Visibility Insight with color samples, score breakdowns, and accuracy labels.
+- Fixed-palette Toy Color Lab for corrected, scored visible objects.
+- Human and canine-approximation contrast comparisons against the measured
+  nearby background.
+- Deterministic ranking of six screen colors and a strongest simulated option.
+- Illustrative bounding-box color preview with explicit limitations around
+  segmentation, physical products, and exact canine vision.
 - In-flight request cancellation and stale-score protection after navigation or
   object corrections.
 - Gemini-grounded fictional nature-documentary scripts generated only from

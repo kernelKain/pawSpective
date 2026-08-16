@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from backend.app.contracts import (
+    ColorSimulationResponse,
     SceneAnalysisResponse,
     StoryReelRequest,
     StoryScriptResponse,
@@ -16,6 +17,7 @@ SCHEMAS = {
     "visibility-analysis.schema.json": VisibilityAnalysisResponse,
     "story-reel-request.schema.json": StoryReelRequest,
     "story-script.schema.json": StoryScriptResponse,
+    "color-simulation.schema.json": ColorSimulationResponse,
 }
 
 

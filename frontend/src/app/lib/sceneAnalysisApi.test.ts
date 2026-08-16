@@ -15,6 +15,7 @@ import type {
 } from "../types/sceneAnalysis";
 import {
   renderCapturedStoryReel,
+  simulateCapturedObjectColors,
 } from "./sceneAnalysisApi";
 
 const fetchMock = vi.fn<typeof fetch>();
@@ -37,6 +38,22 @@ const events = [
     end_seconds: 3,
   },
 ] as unknown as SceneEvent[];
+
+const colorEvent: SceneEvent = {
+  event_id: "event-1",
+  timestamp_ms: 1_000,
+  object_label: "  Red ball  ",
+  category: "toy",
+  bounding_box: {
+    x_min: 0.2,
+    y_min: 0.2,
+    x_max: 0.5,
+    y_max: 0.5,
+  },
+  confidence: 0.9,
+  visible_evidence: "A red ball is visible.",
+  motion_level: "medium",
+};
 
 const scores = [
   {
@@ -100,6 +117,59 @@ describe("sceneAnalysisApi", () => {
       ).toBeTypeOf("function");
     },
   );
+
+  it("submits a trimmed Gemini event to Toy Color Lab", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        simulation_version: "1.0",
+        method: "fixed-swatch-background-lab-v1",
+        event_id: "event-1",
+        recommended_color_id: "blue",
+        options: [],
+      }),
+    );
+    const abortController = new AbortController();
+
+    await simulateCapturedObjectColors(
+      clip,
+      colorEvent,
+      abortController.signal,
+    );
+
+    const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/api/v1/simulate-object-colors");
+    expect(options.signal).toBe(abortController.signal);
+    const formData = options.body as FormData;
+    const uploadedFile = formData.get("file") as File;
+    expect(uploadedFile.name).toBe(clip.file.name);
+    expect(uploadedFile.type).toBe(clip.file.type);
+    expect(JSON.parse(String(formData.get("payload")))).toMatchObject({
+      analysis_source: "gemini",
+      event: {
+        event_id: "event-1",
+        object_label: "Red ball",
+      },
+    });
+  });
+
+  it("uses the Toy Color Lab API error and forwards abort failures", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ detail: "The selected frame could not be read." }, false),
+    );
+
+    await expect(
+      simulateCapturedObjectColors(clip, colorEvent),
+    ).rejects.toThrow("The selected frame could not be read.");
+
+    fetchMock.mockRejectedValueOnce(new DOMException("Aborted", "AbortError"));
+    await expect(
+      simulateCapturedObjectColors(
+        clip,
+        colorEvent,
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({ name: "AbortError" });
+  });
 
   it(
     "creates a multipart job, polls it, downloads the result, and reports progress",

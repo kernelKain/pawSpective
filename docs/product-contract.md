@@ -17,9 +17,10 @@ thoughts, emotions, or sense of smell.
 5. PawSpective identifies three to five visible objects.
 6. The owner reviews and corrects those objects.
 7. PawSpective displays one dog-visible contrast insight.
-8. PawSpective displays possible attention cues in a Curiosity Map.
-9. PawSpective generates one narrated vertical Story Reel.
-10. The owner downloads the reel.
+8. The owner may compare fixed screen colors for one scored object.
+9. PawSpective displays possible attention cues in a Curiosity Map.
+10. PawSpective generates one narrated vertical Story Reel.
+11. The owner downloads the reel.
 
 ## Information labels
 Every generated result must use one of these labels.
@@ -83,6 +84,7 @@ Do not use:
 - One predefined fictional dog voice
 - Downloadable vertical video
 - Accuracy Drawer
+- Toy Color Lab for corrected, scored Gemini events
 
 ## Explicitly deferred
 - Authentication
@@ -90,7 +92,6 @@ Do not use:
 - Custom voice generation
 - Breed-specific vision filters
 - Exact head or gaze tracking
-- Alternative toy-color simulation
 - Multiple languages
 - Community feed
 - Full video editor
@@ -144,6 +145,33 @@ Before scoring or storytelling, the user must be able to:
 - Choose the object used for visibility analysis
 
 Corrected data becomes the source of truth for later processing.
+
+## Toy Color Lab contract
+
+Toy Color Lab compares a fixed set of screen colors against the measured
+nearby background of one corrected Gemini event.
+
+The calculation:
+
+1. Seeks to the corrected event timestamp.
+2. Reuses the Phase 4 inner object and surrounding-background regions.
+3. Keeps the measured nearby-background color unchanged.
+4. Replaces only the object-color input to the contrast formula with one fixed
+   palette color.
+5. Applies the existing canine color transformation.
+6. Calculates human and canine-approximation Lab contrast.
+7. Ranks colors by approximate dog-visible contrast.
+
+The result is not:
+
+- Exact canine perception.
+- Gemini segmentation.
+- A physical recoloring of the source object.
+- A guarantee that a physical toy will have the same contrast.
+- A behavioral recommendation.
+
+The bounding-box tint is an illustrative preview only. Simulated colors must
+never replace corrected scene evidence or enter Story Reel grounding.
 
 ## Scoring contract
 A dog-visible contrast score is a relative product score. It is not a

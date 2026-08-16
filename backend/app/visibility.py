@@ -158,6 +158,30 @@ def _hex_color(rgb: np.ndarray) -> str:
     return "#{:02X}{:02X}{:02X}".format(*channels)
 
 
+def sample_event_median_colors(
+    frame_rgb: np.ndarray,
+    event: SceneEvent,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return median object and nearby-background sRGB colors."""
+    object_pixels, background_pixels = _extract_regions(frame_rgb, event)
+
+    return (
+        _median_color(object_pixels),
+        _median_color(background_pixels),
+    )
+
+
+def relative_contrast_score(
+    object_color: np.ndarray,
+    background_color: np.ndarray,
+) -> int:
+    return _contrast_score(object_color, background_color)
+
+
+def rgb_to_hex(rgb: np.ndarray) -> str:
+    return _hex_color(rgb)
+
+
 def _favorite_matches(event: SceneEvent, favorite: str) -> bool:
     normalized_favorite = favorite.strip().lower()
     words = set(re.findall(r"[a-z]+", event.object_label.lower()))
@@ -200,25 +224,19 @@ def score_event_frame(
     event: SceneEvent,
     favorite_interest: str,
 ) -> VisibilityScore:
-    object_pixels, background_pixels = _extract_regions(
+    human_object, human_background = sample_event_median_colors(
         frame_rgb,
         event,
     )
 
-    human_object = _median_color(object_pixels)
-    human_background = _median_color(background_pixels)
+    dog_object = canine_approximation(human_object[np.newaxis, :])[0]
+    dog_background = canine_approximation(human_background[np.newaxis, :])[0]
 
-    dog_object_pixels = canine_approximation(object_pixels)
-    dog_background_pixels = canine_approximation(background_pixels)
-
-    dog_object = _median_color(dog_object_pixels)
-    dog_background = _median_color(dog_background_pixels)
-
-    human_contrast = _contrast_score(
+    human_contrast = relative_contrast_score(
         human_object,
         human_background,
     )
-    dog_contrast = _contrast_score(
+    dog_contrast = relative_contrast_score(
         dog_object,
         dog_background,
     )
@@ -302,10 +320,10 @@ def score_event_frame(
         profile_relevance_score=profile_relevance_score,
         salience_score=salience_score,
         salience_level=_salience_level(salience_score),
-        human_object_color=_hex_color(human_object),
-        human_background_color=_hex_color(human_background),
-        dog_object_color=_hex_color(dog_object),
-        dog_background_color=_hex_color(dog_background),
+        human_object_color=rgb_to_hex(human_object),
+        human_background_color=rgb_to_hex(human_background),
+        dog_object_color=rgb_to_hex(dog_object),
+        dog_background_color=rgb_to_hex(dog_background),
         explanation=explanation,
         why=why[:4],
     )

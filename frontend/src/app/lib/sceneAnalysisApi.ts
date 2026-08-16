@@ -1,6 +1,7 @@
 import type {
   AnalyzeVideoResponse,
   CapturedClip,
+  ColorSimulationResponse,
   SceneEvent,
   StoryJobCreateResponse,
   StoryJobStatusResponse,
@@ -151,6 +152,44 @@ export async function scoreCapturedClip(
   return (
     await response.json()
   ) as VisibilityAnalysisResponse;
+}
+
+export async function simulateCapturedObjectColors(
+  clip: CapturedClip,
+  event: SceneEvent,
+  signal?: AbortSignal,
+): Promise<ColorSimulationResponse> {
+  const formData = new FormData();
+
+  formData.append("file", clip.file, clip.file.name);
+  formData.append(
+    "payload",
+    JSON.stringify({
+      analysis_source: "gemini",
+      event: {
+        ...event,
+        object_label: event.object_label.trim(),
+      },
+    }),
+  );
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/simulate-object-colors`,
+    {
+      method: "POST",
+      body: formData,
+      signal,
+    },
+  );
+
+  if (!response.ok) {
+    throw await readApiError(
+      response,
+      "Toy Color Lab simulation failed.",
+    );
+  }
+
+  return (await response.json()) as ColorSimulationResponse;
 }
 
 export async function renderCapturedStoryReel(

@@ -1,0 +1,178 @@
+{
+  "$defs": {
+    "ColorSimulationOption": {
+      "additionalProperties": false,
+      "properties": {
+        "color_id": {
+          "enum": [
+            "blue",
+            "yellow",
+            "red",
+            "green",
+            "orange",
+            "purple"
+          ],
+          "title": "Color Id",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 30,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "human_color": {
+          "pattern": "^#[0-9A-F]{6}$",
+          "title": "Human Color",
+          "type": "string"
+        },
+        "dog_approx_color": {
+          "pattern": "^#[0-9A-F]{6}$",
+          "title": "Dog Approx Color",
+          "type": "string"
+        },
+        "human_contrast_score": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Human Contrast Score",
+          "type": "integer"
+        },
+        "dog_contrast_score": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Dog Contrast Score",
+          "type": "integer"
+        },
+        "dog_contrast_gain": {
+          "maximum": 100,
+          "minimum": -100,
+          "title": "Dog Contrast Gain",
+          "type": "integer"
+        },
+        "contrast_change": {
+          "maximum": 100,
+          "minimum": -100,
+          "title": "Contrast Change",
+          "type": "integer"
+        },
+        "rank": {
+          "maximum": 6,
+          "minimum": 1,
+          "title": "Rank",
+          "type": "integer"
+        },
+        "explanation": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Explanation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "color_id",
+        "label",
+        "human_color",
+        "dog_approx_color",
+        "human_contrast_score",
+        "dog_contrast_score",
+        "dog_contrast_gain",
+        "contrast_change",
+        "rank",
+        "explanation"
+      ],
+      "title": "ColorSimulationOption",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "simulation_version": {
+      "const": "1.0",
+      "title": "Simulation Version",
+      "type": "string"
+    },
+    "method": {
+      "const": "fixed-swatch-background-lab-v1",
+      "title": "Method",
+      "type": "string"
+    },
+    "event_id": {
+      "title": "Event Id",
+      "type": "string"
+    },
+    "original_human_color": {
+      "pattern": "^#[0-9A-F]{6}$",
+      "title": "Original Human Color",
+      "type": "string"
+    },
+    "original_dog_color": {
+      "pattern": "^#[0-9A-F]{6}$",
+      "title": "Original Dog Color",
+      "type": "string"
+    },
+    "human_background_color": {
+      "pattern": "^#[0-9A-F]{6}$",
+      "title": "Human Background Color",
+      "type": "string"
+    },
+    "dog_background_color": {
+      "pattern": "^#[0-9A-F]{6}$",
+      "title": "Dog Background Color",
+      "type": "string"
+    },
+    "original_human_contrast_score": {
+      "maximum": 100,
+      "minimum": 0,
+      "title": "Original Human Contrast Score",
+      "type": "integer"
+    },
+    "original_dog_contrast_score": {
+      "maximum": 100,
+      "minimum": 0,
+      "title": "Original Dog Contrast Score",
+      "type": "integer"
+    },
+    "recommended_color_id": {
+      "enum": [
+        "blue",
+        "yellow",
+        "red",
+        "green",
+        "orange",
+        "purple"
+      ],
+      "title": "Recommended Color Id",
+      "type": "string"
+    },
+    "options": {
+      "items": {
+        "$ref": "#/$defs/ColorSimulationOption"
+      },
+      "maxItems": 6,
+      "minItems": 6,
+      "title": "Options",
+      "type": "array"
+    },
+    "disclaimer": {
+      "const": "Screen-color simulation using a fixed palette and the measured nearby background. It is not exact canine vision, object segmentation, or a physical-product guarantee.",
+      "title": "Disclaimer",
+      "type": "string"
+    }
+  },
+  "required": [
+    "simulation_version",
+    "method",
+    "event_id",
+    "original_human_color",
+    "original_dog_color",
+    "human_background_color",
+    "dog_background_color",
+    "original_human_contrast_score",
+    "original_dog_contrast_score",
+    "recommended_color_id",
+    "options",
+    "disclaimer"
+  ],
+  "title": "ColorSimulationResponse",
+  "type": "object"
+}

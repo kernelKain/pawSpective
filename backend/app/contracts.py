@@ -141,6 +141,54 @@ class VisibilityAnalysisResponse(StrictModel):
     scores: list[VisibilityScore] = Field(max_length=12)
     warnings: list[str] = Field(default_factory=list, max_length=12)
 
+
+ToyColorId = Literal[
+    "blue",
+    "yellow",
+    "red",
+    "green",
+    "orange",
+    "purple",
+]
+
+
+class ColorSimulationRequest(StrictModel):
+    # Cached demo boxes must never be applied to an unrelated clip.
+    analysis_source: Literal["gemini"]
+    event: SceneEvent
+
+
+class ColorSimulationOption(StrictModel):
+    color_id: ToyColorId
+    label: str = Field(min_length=1, max_length=30)
+    human_color: str = Field(pattern=r"^#[0-9A-F]{6}$")
+    dog_approx_color: str = Field(pattern=r"^#[0-9A-F]{6}$")
+    human_contrast_score: int = Field(ge=0, le=100)
+    dog_contrast_score: int = Field(ge=0, le=100)
+    dog_contrast_gain: int = Field(ge=-100, le=100)
+    contrast_change: int = Field(ge=-100, le=100)
+    rank: int = Field(ge=1, le=6)
+    explanation: str = Field(min_length=1, max_length=300)
+
+
+class ColorSimulationResponse(StrictModel):
+    simulation_version: Literal["1.0"]
+    method: Literal["fixed-swatch-background-lab-v1"]
+    event_id: str
+    original_human_color: str = Field(pattern=r"^#[0-9A-F]{6}$")
+    original_dog_color: str = Field(pattern=r"^#[0-9A-F]{6}$")
+    human_background_color: str = Field(pattern=r"^#[0-9A-F]{6}$")
+    dog_background_color: str = Field(pattern=r"^#[0-9A-F]{6}$")
+    original_human_contrast_score: int = Field(ge=0, le=100)
+    original_dog_contrast_score: int = Field(ge=0, le=100)
+    recommended_color_id: ToyColorId
+    options: list[ColorSimulationOption] = Field(min_length=6, max_length=6)
+    disclaimer: Literal[
+        "Screen-color simulation using a fixed palette and the measured "
+        "nearby background. It is not exact canine vision, object "
+        "segmentation, or a physical-product guarantee."
+    ]
+
 class StoryProfile(StrictModel):
     owner_name: str = Field(default="", max_length=60)
     dog_name: str = Field(min_length=1, max_length=40)

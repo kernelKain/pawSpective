@@ -72,6 +72,42 @@ export type VisibilityAnalysisResponse = {
   warnings: string[];
 };
 
+export type ToyColorId =
+  | "blue"
+  | "yellow"
+  | "red"
+  | "green"
+  | "orange"
+  | "purple";
+
+export type ColorSimulationOption = {
+  color_id: ToyColorId;
+  label: string;
+  human_color: string;
+  dog_approx_color: string;
+  human_contrast_score: number;
+  dog_contrast_score: number;
+  dog_contrast_gain: number;
+  contrast_change: number;
+  rank: number;
+  explanation: string;
+};
+
+export type ColorSimulationResponse = {
+  simulation_version: "1.0";
+  method: "fixed-swatch-background-lab-v1";
+  event_id: string;
+  original_human_color: string;
+  original_dog_color: string;
+  human_background_color: string;
+  dog_background_color: string;
+  original_human_contrast_score: number;
+  original_dog_contrast_score: number;
+  recommended_color_id: ToyColorId;
+  options: ColorSimulationOption[];
+  disclaimer: "Screen-color simulation using a fixed palette and the measured nearby background. It is not exact canine vision, object segmentation, or a physical-product guarantee.";
+};
+
 export type StoryProfileInput = {
   owner_name: string;
   dog_name: string;

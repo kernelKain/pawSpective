@@ -26,7 +26,13 @@ from backend.app.analysis import (
     SceneAnalysisError,
     analyze_video,
 )
+from backend.app.color_lab import (
+    ColorSimulationError,
+    simulate_object_colors,
+)
 from backend.app.contracts import (
+    ColorSimulationRequest,
+    ColorSimulationResponse,
     SceneAnalysisResponse,
     StoryJobCreateResponse,
     StoryJobStatusResponse,
@@ -93,7 +99,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title="PawSpective API",
-    version="0.6.0",
+    version="0.7.0",
     lifespan=lifespan,
 )
 
@@ -471,6 +477,77 @@ async def score_video_visibility(
             status_code=422,
             detail=str(error),
         ) from error
+
+
+@app.post(
+    "/api/v1/simulate-object-colors",
+    response_model=ColorSimulationResponse,
+)
+async def simulate_uploaded_object_colors(
+    file: UploadFile = File(...),
+    payload: str = Form(...),
+) -> ColorSimulationResponse:
+    content_type = file.content_type or ""
+
+    if content_type not in ALLOWED_VIDEO_TYPES:
+        raise HTTPException(
+            status_code=415,
+            detail=(
+                "Unsupported video type. Upload MP4, WebM, "
+                "QuickTime, or Matroska video."
+            ),
+        )
+
+    try:
+        simulation_request = ColorSimulationRequest.model_validate_json(payload)
+    except ValidationError as error:
+        raise HTTPException(
+            status_code=422,
+            detail="The color simulation payload is invalid.",
+        ) from error
+
+    extension = ALLOWED_VIDEO_TYPES[content_type]
+
+    try:
+        with tempfile.TemporaryDirectory(
+            prefix="pawspective-color-lab-",
+            dir=settings.media_directory,
+        ) as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            source_path = temporary_path / f"source{extension}"
+            normalized_path = temporary_path / "normalized.mp4"
+
+            await save_upload(file, source_path, settings.max_upload_bytes)
+            duration_ms = await asyncio.to_thread(
+                probe_duration_ms,
+                source_path,
+            )
+
+            if duration_ms < 5_000:
+                raise MediaValidationError("Record at least five seconds.")
+
+            maximum_duration_ms = settings.max_video_duration_seconds * 1000
+
+            if duration_ms > maximum_duration_ms:
+                raise MediaValidationError(
+                    "The maximum accepted duration is "
+                    f"{settings.max_video_duration_seconds} seconds."
+                )
+
+            await asyncio.to_thread(
+                normalize_video,
+                source_path,
+                normalized_path,
+            )
+
+            return await asyncio.to_thread(
+                simulate_object_colors,
+                normalized_path,
+                simulation_request.event,
+                duration_ms,
+            )
+    except (MediaValidationError, ColorSimulationError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @app.post(

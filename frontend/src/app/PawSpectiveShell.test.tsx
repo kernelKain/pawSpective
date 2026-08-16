@@ -17,10 +17,12 @@ import {
   analyzeCapturedClip,
   renderCapturedStoryReel,
   scoreCapturedClip,
+  simulateCapturedObjectColors,
 } from "./lib/sceneAnalysisApi";
 import { PawSpectiveShell } from "./PawSpectiveShell";
 import type {
   CapturedClip,
+  ColorSimulationResponse,
   SceneEvent,
   VisibilityAnalysisResponse,
   VisibilityScore,
@@ -105,10 +107,38 @@ vi.mock("./components/StoryReel", () => ({
     </div>
   ),
 }));
+vi.mock("./components/ToyColorLab", () => ({
+  ToyColorLab: ({
+    result,
+    isLoading,
+    error,
+    disabled,
+    onSimulate,
+  }: {
+    result: ColorSimulationResponse | null;
+    isLoading: boolean;
+    error: string | null;
+    disabled: boolean;
+    onSimulate: () => void;
+  }) => (
+    <div aria-label="Toy Color Lab test view">
+      <button
+        type="button"
+        disabled={disabled || isLoading}
+        onClick={onSimulate}
+      >
+        {isLoading ? "Comparing colors…" : "Try another color"}
+      </button>
+      {result && <span>Recommended color: {result.recommended_color_id}</span>}
+      {error && <div role="alert">{error}</div>}
+    </div>
+  ),
+}));
 
 const mockedAnalyze = vi.mocked(analyzeCapturedClip);
 const mockedScore = vi.mocked(scoreCapturedClip);
 const mockedRenderStory = vi.mocked(renderCapturedStoryReel);
+const mockedSimulateColors = vi.mocked(simulateCapturedObjectColors);
 
 function sceneEvent(
   eventId: string,
@@ -158,6 +188,22 @@ const visibilityScore: VisibilityScore = {
   why: [
     "The transformed object/background contrast is high.",
   ],
+};
+
+const colorSimulation: ColorSimulationResponse = {
+  simulation_version: "1.0",
+  method: "fixed-swatch-background-lab-v1",
+  event_id: "ball",
+  original_human_color: "#2055D0",
+  original_dog_color: "#3F6BC8",
+  human_background_color: "#438A35",
+  dog_background_color: "#8A813B",
+  original_human_contrast_score: 70,
+  original_dog_contrast_score: 84,
+  recommended_color_id: "yellow",
+  options: [],
+  disclaimer:
+    "Screen-color simulation using a fixed palette and the measured nearby background. It is not exact canine vision, object segmentation, or a physical-product guarantee.",
 };
 
 function visibilityResponse(
@@ -224,7 +270,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("PawSpectiveShell Phase 5 flow", () => {
+describe("PawSpectiveShell Phase 7 flow", () => {
   it("labels demo fallback, supports corrections, and blocks scoring", async () => {
     await reachResults("demo");
 
@@ -478,5 +524,84 @@ describe("PawSpectiveShell Phase 5 flow", () => {
     expect(
       screen.queryByText("75/100 cue score"),
     ).toBeNull();
+  });
+
+  it("requires a score and clears a Toy Color Lab result when selection changes", async () => {
+    mockedScore.mockResolvedValue(visibilityResponse());
+    mockedSimulateColors.mockResolvedValue(colorSimulation);
+    await reachResults();
+
+    const colorButton = screen.getByRole("button", {
+      name: "Try another color",
+    });
+    expect((colorButton as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Calculate visibility & curiosity",
+      }),
+    );
+    await screen.findByText("75/100 cue score");
+    fireEvent.click(colorButton);
+    await screen.findByText("Recommended color: yellow");
+
+    expect(mockedSimulateColors).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ event_id: "ball" }),
+      expect.any(AbortSignal),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Select tree" }));
+    expect(screen.queryByText("Recommended color: yellow")).toBeNull();
+  });
+
+  it("does not add simulated colors to Story Reel grounding", async () => {
+    mockedScore.mockResolvedValue(visibilityResponse());
+    mockedSimulateColors.mockResolvedValue(colorSimulation);
+    mockedRenderStory.mockResolvedValue({
+      video: new Blob(["story"], { type: "video/mp4" }),
+      source: "gemini",
+    });
+    await reachResults();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Calculate visibility & curiosity",
+      }),
+    );
+    await screen.findByText("75/100 cue score");
+    fireEvent.click(screen.getByRole("button", { name: "Try another color" }));
+    await screen.findByText("Recommended color: yellow");
+    fireEvent.click(screen.getByRole("button", { name: "Create Story Reel" }));
+    await screen.findByText("Story source: gemini");
+
+    expect(mockedRenderStory.mock.calls[0][1]).toEqual(analyzedEvents);
+    expect(mockedRenderStory.mock.calls[0][2]).toEqual([visibilityScore]);
+  });
+
+  it("aborts and ignores an in-flight color simulation after selection changes", async () => {
+    const pendingSimulation = deferred<ColorSimulationResponse>();
+    mockedScore.mockResolvedValue(visibilityResponse());
+    mockedSimulateColors.mockReturnValue(pendingSimulation.promise);
+    await reachResults();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Calculate visibility & curiosity",
+      }),
+    );
+    await screen.findByText("75/100 cue score");
+    fireEvent.click(screen.getByRole("button", { name: "Try another color" }));
+
+    await waitFor(() => expect(mockedSimulateColors).toHaveBeenCalledOnce());
+    const requestSignal = mockedSimulateColors.mock.calls[0][2];
+    fireEvent.click(screen.getByRole("button", { name: "Select tree" }));
+
+    expect(requestSignal?.aborted).toBe(true);
+    pendingSimulation.resolve(colorSimulation);
+
+    await waitFor(() => {
+      expect(screen.queryByText("Recommended color: yellow")).toBeNull();
+    });
   });
 });

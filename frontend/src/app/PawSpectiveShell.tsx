@@ -6,14 +6,17 @@ import type { ChangeEvent, FormEvent } from "react";
 import { CuriosityMap } from "./components/CuriosityMap";
 import { LiveDogLens } from "./components/LiveDogLens";
 import { StoryReel } from "./components/StoryReel";
+import { ToyColorLab } from "./components/ToyColorLab";
 import { VisibilityInsight } from "./components/VisibilityInsight";
 import {
   analyzeCapturedClip,
   renderCapturedStoryReel,
   scoreCapturedClip,
+  simulateCapturedObjectColors,
 } from "./lib/sceneAnalysisApi";
 import type {
   CapturedClip,
+  ColorSimulationResponse,
   SceneEvent,
   StoryReelResult,
   VisibilityScore,
@@ -141,6 +144,27 @@ export function PawSpectiveShell({
   const storyAbortControllerRef =
     useRef<AbortController | null>(null);
 
+  const [colorSimulation, setColorSimulation] =
+    useState<ColorSimulationResponse | null>(null);
+  const [colorSimulationError, setColorSimulationError] =
+    useState<string | null>(null);
+  const [isSimulatingColor, setIsSimulatingColor] =
+    useState(false);
+
+  const colorRequestIdRef = useRef(0);
+  const colorAbortControllerRef =
+    useRef<AbortController | null>(null);
+
+  function invalidateColorSimulation() {
+    colorRequestIdRef.current += 1;
+    colorAbortControllerRef.current?.abort();
+    colorAbortControllerRef.current = null;
+
+    setIsSimulatingColor(false);
+    setColorSimulation(null);
+    setColorSimulationError(null);
+  }
+
   function invalidateStoryReel() {
     storyRequestIdRef.current += 1;
     storyAbortControllerRef.current?.abort();
@@ -153,6 +177,7 @@ export function PawSpectiveShell({
   }
 
   function invalidateVisibilityScores() {
+    invalidateColorSimulation();
     invalidateStoryReel();
 
     visibilityRequestIdRef.current += 1;
@@ -172,6 +197,9 @@ export function PawSpectiveShell({
 
       storyRequestIdRef.current += 1;
       storyAbortControllerRef.current?.abort();
+
+      colorRequestIdRef.current += 1;
+      colorAbortControllerRef.current?.abort();
     };
   }, []);
 
@@ -265,6 +293,7 @@ export function PawSpectiveShell({
   function selectEvent(
     eventId: string,
   ) {
+    invalidateColorSimulation();
     invalidateStoryReel();
     setSelectedEventId(eventId);
   }
@@ -318,6 +347,7 @@ export function PawSpectiveShell({
       return;
     }
 
+    invalidateColorSimulation();
     invalidateStoryReel();
     visibilityAbortControllerRef.current?.abort();
 
@@ -494,6 +524,74 @@ export function PawSpectiveShell({
     }
   }
 
+  async function calculateColorSimulation() {
+    if (
+      !capturedClip ||
+      !selectedEvent ||
+      analysisSource !== "gemini"
+    ) {
+      return;
+    }
+
+    const selectedHasScore = visibilityScores.some(
+      (score) => score.event_id === selectedEvent.event_id,
+    );
+
+    if (!selectedHasScore) {
+      setColorSimulationError(
+        "Calculate visibility for this object before comparing colors.",
+      );
+      return;
+    }
+
+    colorAbortControllerRef.current?.abort();
+
+    const requestId = colorRequestIdRef.current + 1;
+    const abortController = new AbortController();
+
+    colorRequestIdRef.current = requestId;
+    colorAbortControllerRef.current = abortController;
+    setIsSimulatingColor(true);
+    setColorSimulation(null);
+    setColorSimulationError(null);
+
+    try {
+      const response = await simulateCapturedObjectColors(
+        capturedClip,
+        selectedEvent,
+        abortController.signal,
+      );
+
+      if (
+        requestId !== colorRequestIdRef.current ||
+        abortController.signal.aborted
+      ) {
+        return;
+      }
+
+      setColorSimulation(response);
+    } catch (error) {
+      if (
+        requestId !== colorRequestIdRef.current ||
+        abortController.signal.aborted ||
+        (error instanceof DOMException && error.name === "AbortError")
+      ) {
+        return;
+      }
+
+      setColorSimulationError(
+        error instanceof Error
+          ? error.message
+          : "Toy Color Lab simulation failed.",
+      );
+    } finally {
+      if (requestId === colorRequestIdRef.current) {
+        colorAbortControllerRef.current = null;
+        setIsSimulatingColor(false);
+      }
+    }
+  }
+
   function renameEvent(
     eventId: string,
     objectLabel: string,
@@ -560,7 +658,7 @@ export function PawSpectiveShell({
     );
 
   const isResultsBusy =
-    isScoring || isRenderingStory;
+    isScoring || isRenderingStory || isSimulatingColor;
 
   return (
     <main className="app-shell">
@@ -593,7 +691,7 @@ export function PawSpectiveShell({
 
         <div className="topbar-actions">
           <span className="phase-badge">
-            Phase 5 · Story Reel
+            Phase 7 · Toy Color Lab
           </span>
 
           <button
@@ -1380,6 +1478,38 @@ export function PawSpectiveShell({
               />
             </section>
 
+            <section className="result-card color-lab-card">
+              <div className="card-heading">
+                <div>
+                  <span className="label science">
+                    Deterministic simulation
+                  </span>
+                  <h2>Toy Color Lab</h2>
+                </div>
+
+                {colorSimulation && <span>Fixed six-color palette</span>}
+              </div>
+
+              {capturedClip && selectedEvent ? (
+                <ToyColorLab
+                  clip={capturedClip}
+                  event={selectedEvent}
+                  result={colorSimulation}
+                  isLoading={isSimulatingColor}
+                  error={colorSimulationError}
+                  disabled={
+                    analysisSource !== "gemini" ||
+                    !selectedVisibilityScore ||
+                    isScoring ||
+                    isRenderingStory
+                  }
+                  onSimulate={() => void calculateColorSimulation()}
+                />
+              ) : (
+                <p>Select a scored object to compare simulated colors.</p>
+              )}
+            </section>
+
             <section className="result-card story-card">
               <div className="card-heading">
                 <div>
@@ -1408,7 +1538,8 @@ export function PawSpectiveShell({
                     "gemini" ||
                   visibilityScores.length ===
                     0 ||
-                  isScoring
+                  isScoring ||
+                  isSimulatingColor
                 }
                 onRender={() =>
                   void createStoryReel()
@@ -1476,14 +1607,9 @@ export function PawSpectiveShell({
                 </strong>
 
                 <p>
-                  Canine color
-                  transformation and
-                  foreground/background
-                  contrast calculation,
-                  apparent-size
-                  measurement, and
-                  deterministic score
-                  weighting.
+                  Canine color transformation, foreground/background
+                  sampling, relative contrast calculations, deterministic
+                  weighting, and fixed-palette Toy Color Lab comparisons.
                 </p>
               </div>
             </div>
@@ -1499,11 +1625,9 @@ export function PawSpectiveShell({
                 </strong>
 
                 <p>
-                  Object identification,
-                  bounding boxes, ordinal
-                  motion labels, and
-                  possible visible
-                  attention cues.
+                  Object identification, bounding boxes, ordinal motion
+                  labels, and possible visible attention cues. The Toy Color
+                  Lab uses the selected AI bounding box.
                 </p>
               </div>
             </div>
@@ -1531,6 +1655,13 @@ export function PawSpectiveShell({
               read a dog&apos;s exact gaze,
               thoughts, feelings or sense
               of smell.
+            </div>
+
+            <div className="accuracy-warning">
+              Toy Color Lab previews tint an entire bounding box for
+              illustration. They are not object segmentation and do not
+              predict the appearance of a physical product under every
+              lighting condition.
             </div>
           </aside>
         </div>
