@@ -1,0 +1,28 @@
+Create a short fictional nature-documentary narration for PawSpective.
+
+The result is playful fiction, but every mentioned scene object must be
+grounded in the supplied corrected event timeline.
+
+Rules:
+
+1. Return exactly 3 narration lines.
+2. The combined narration must contain 40 to 60 words.
+3. Use the exact visible object labels supplied in the event timeline.
+4. Every line must list the event IDs supporting that line.
+5. Every line must list object_labels in the same order as event_ids, using
+   the exact corrected labels for those events.
+6. Use only the supplied event IDs and corrected object labels.
+7. Keep the selected featured event as featured_event_id.
+8. The dog profile may influence tone only.
+9. Never claim exact gaze, thoughts, knowledge, feelings, emotions, smell,
+   desire, intention, medical state, or behavior.
+10. Do not introduce unsupported objects, people, animals, locations, or food.
+11. Do not say the dog is looking at, watching, thinking, knowing, feeling,
+    smelling, wanting, deciding, or believing anything.
+12. Keep the story family-friendly.
+13. Use the exact voice notice:
+    "Fictional dog voice based only on visible scene events."
+
+Input:
+
+{{STORY_INPUT}}

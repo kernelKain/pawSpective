@@ -1,0 +1,87 @@
+{
+  "$defs": {
+    "StoryLine": {
+      "additionalProperties": false,
+      "properties": {
+        "event_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "Event Ids",
+          "type": "array"
+        },
+        "object_labels": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "Object Labels",
+          "type": "array"
+        },
+        "text": {
+          "maxLength": 220,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_ids",
+        "object_labels",
+        "text"
+      ],
+      "title": "StoryLine",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "story_version": {
+      "const": "1.0",
+      "title": "Story Version",
+      "type": "string"
+    },
+    "style": {
+      "const": "nature_documentary",
+      "title": "Style",
+      "type": "string"
+    },
+    "title": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+    },
+    "lines": {
+      "items": {
+        "$ref": "#/$defs/StoryLine"
+      },
+      "maxItems": 4,
+      "minItems": 3,
+      "title": "Lines",
+      "type": "array"
+    },
+    "featured_event_id": {
+      "title": "Featured Event Id",
+      "type": "string"
+    },
+    "voice_notice": {
+      "const": "Fictional dog voice based only on visible scene events.",
+      "title": "Voice Notice",
+      "type": "string"
+    }
+  },
+  "required": [
+    "story_version",
+    "style",
+    "title",
+    "lines",
+    "featured_event_id",
+    "voice_notice"
+  ],
+  "title": "StoryScriptResponse",
+  "type": "object"
+}

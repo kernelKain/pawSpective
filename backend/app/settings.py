@@ -41,6 +41,10 @@ class Settings:
     max_upload_bytes: int
     cors_origins: tuple[str, ...]
 
+    elevenlabs_api_key: str
+    elevenlabs_dog_voice_id: str
+    elevenlabs_model_id: str
+
 
 settings = Settings(
     gemini_api_key=os.getenv("GEMINI_API_KEY", ""),
@@ -67,6 +71,18 @@ settings = Settings(
             "PAWSPECTIVE_MAX_UPLOAD_BYTES",
             str(30 * 1024 * 1024),
         ),
+    ),
+    elevenlabs_api_key=os.getenv(
+        "ELEVENLABS_API_KEY",
+        "",
+    ),
+    elevenlabs_dog_voice_id=os.getenv(
+        "ELEVENLABS_DOG_VOICE_ID",
+        "",
+    ),
+    elevenlabs_model_id=os.getenv(
+        "ELEVENLABS_MODEL_ID",
+        "eleven_flash_v2_5",
     ),
     cors_origins=env_origins(),
 )

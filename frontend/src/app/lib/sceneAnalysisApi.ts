@@ -2,7 +2,10 @@ import type {
   AnalyzeVideoResponse,
   CapturedClip,
   SceneEvent,
+  StoryProfileInput,
+  StoryReelResult,
   VisibilityAnalysisResponse,
+  VisibilityScore,
 } from "../types/sceneAnalysis";
 
 const API_BASE_URL =
@@ -89,4 +92,56 @@ export async function scoreCapturedClip(
   }
 
   return (await response.json()) as VisibilityAnalysisResponse;
+}
+
+export async function renderCapturedStoryReel(
+  clip: CapturedClip,
+  events: SceneEvent[],
+  scores: VisibilityScore[],
+  featuredEventId: string,
+  profile: StoryProfileInput,
+  signal?: AbortSignal,
+): Promise<StoryReelResult> {
+  const formData = new FormData();
+
+  formData.append("file", clip.file, clip.file.name);
+  formData.append(
+    "payload",
+    JSON.stringify({
+      analysis_source: "gemini",
+      style: "nature_documentary",
+      profile,
+      events,
+      scores,
+      featured_event_id: featuredEventId,
+    }),
+  );
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/render-story-reel`,
+    {
+      method: "POST",
+      body: formData,
+      signal,
+    },
+  );
+
+  if (!response.ok) {
+    throw await readApiError(
+      response,
+      "Story Reel generation failed.",
+    );
+  }
+
+  const sourceHeader = response.headers.get(
+    "X-PawSpective-Story-Source",
+  );
+
+  return {
+    video: await response.blob(),
+    source:
+      sourceHeader === "gemini"
+        ? "gemini"
+        : "template",
+  };
 }

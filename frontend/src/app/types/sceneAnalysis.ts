@@ -71,3 +71,20 @@ export type VisibilityAnalysisResponse = {
   scores: VisibilityScore[];
   warnings: string[];
 };
+
+export type StoryProfileInput = {
+  owner_name: string;
+  dog_name: string;
+  breed: string;
+  age: "Puppy" | "Adult" | "Senior";
+  size: "Small" | "Medium" | "Large";
+  personality_tags: string[];
+  favorite_interest: string;
+};
+
+export type StoryReelSource = "gemini" | "template";
+
+export type StoryReelResult = {
+  video: Blob;
+  source: StoryReelSource;
+};

@@ -140,3 +140,86 @@ class VisibilityAnalysisResponse(StrictModel):
     method: Literal["bbox-region-lab-v1"]
     scores: list[VisibilityScore] = Field(max_length=12)
     warnings: list[str] = Field(default_factory=list, max_length=12)
+
+class StoryProfile(StrictModel):
+    owner_name: str = Field(default="", max_length=60)
+    dog_name: str = Field(min_length=1, max_length=40)
+    breed: str = Field(default="", max_length=80)
+    age: Literal["Puppy", "Adult", "Senior"]
+    size: Literal["Small", "Medium", "Large"]
+    personality_tags: list[str] = Field(
+        default_factory=list,
+        max_length=2,
+    )
+    favorite_interest: str = Field(default="", max_length=40)
+
+
+class StoryLine(StrictModel):
+    event_ids: list[str] = Field(min_length=1, max_length=3)
+    object_labels: list[str] = Field(min_length=1, max_length=3)
+    text: str = Field(min_length=1, max_length=220)
+
+
+class StoryScriptResponse(StrictModel):
+    story_version: Literal["1.0"]
+    style: Literal["nature_documentary"]
+    title: str = Field(min_length=1, max_length=80)
+    lines: list[StoryLine] = Field(min_length=3, max_length=4)
+    featured_event_id: str
+    voice_notice: Literal[
+        "Fictional dog voice based only on visible scene events."
+    ]
+
+    @property
+    def narration_text(self) -> str:
+        return " ".join(line.text.strip() for line in self.lines)
+
+    @model_validator(mode="after")
+    def validate_story_length(self) -> "StoryScriptResponse":
+        word_count = len(self.narration_text.split())
+
+        if word_count < 40 or word_count > 60:
+            raise ValueError(
+                "Story narration must contain 40 to 60 words"
+            )
+
+        return self
+
+
+class StoryReelRequest(StrictModel):
+    analysis_source: Literal["gemini"]
+    style: Literal["nature_documentary"] = "nature_documentary"
+    profile: StoryProfile
+    events: list[SceneEvent] = Field(min_length=1, max_length=12)
+    scores: list[VisibilityScore] = Field(min_length=1, max_length=12)
+    featured_event_id: str
+
+    @model_validator(mode="after")
+    def validate_story_inputs(self) -> "StoryReelRequest":
+        event_ids = [event.event_id for event in self.events]
+        score_ids = [score.event_id for score in self.scores]
+
+        if len(event_ids) != len(set(event_ids)):
+            raise ValueError("Story event IDs must be unique")
+
+        if len(score_ids) != len(set(score_ids)):
+            raise ValueError("Story score IDs must be unique")
+
+        unknown_scores = set(score_ids) - set(event_ids)
+
+        if unknown_scores:
+            raise ValueError(
+                "Every visibility score must reference a corrected event"
+            )
+
+        if self.featured_event_id not in event_ids:
+            raise ValueError(
+                "The featured event must exist in the corrected timeline"
+            )
+
+        if self.featured_event_id not in score_ids:
+            raise ValueError(
+                "The featured event must have a visibility score"
+            )
+
+        return self

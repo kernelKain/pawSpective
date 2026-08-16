@@ -15,6 +15,7 @@ import {
 
 import {
   analyzeCapturedClip,
+  renderCapturedStoryReel,
   scoreCapturedClip,
 } from "./lib/sceneAnalysisApi";
 import { PawSpectiveShell } from "./PawSpectiveShell";
@@ -23,6 +24,7 @@ import type {
   SceneEvent,
   VisibilityAnalysisResponse,
   VisibilityScore,
+  StoryReelResult,
 } from "./types/sceneAnalysis";
 
 vi.mock("./lib/sceneAnalysisApi");
@@ -76,9 +78,37 @@ vi.mock("./components/CuriosityMap", () => ({
     </div>
   ),
 }));
+vi.mock("./components/StoryReel", () => ({
+  StoryReel: ({
+    result,
+    isRendering,
+    error,
+    disabled,
+    onRender,
+  }: {
+    result: StoryReelResult | null;
+    isRendering: boolean;
+    error: string | null;
+    disabled: boolean;
+    onRender: () => void;
+  }) => (
+    <div aria-label="Story Reel test view">
+      <button
+        type="button"
+        disabled={disabled || isRendering}
+        onClick={onRender}
+      >
+        {isRendering ? "Creating Story Reel…" : "Create Story Reel"}
+      </button>
+      {result && <span>Story source: {result.source}</span>}
+      {error && <div role="alert">{error}</div>}
+    </div>
+  ),
+}));
 
 const mockedAnalyze = vi.mocked(analyzeCapturedClip);
 const mockedScore = vi.mocked(scoreCapturedClip);
+const mockedRenderStory = vi.mocked(renderCapturedStoryReel);
 
 function sceneEvent(
   eventId: string,
@@ -194,7 +224,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("PawSpectiveShell Phase 4 flow", () => {
+describe("PawSpectiveShell Phase 5 flow", () => {
   it("labels demo fallback, supports corrections, and blocks scoring", async () => {
     await reachResults("demo");
 
@@ -222,6 +252,80 @@ describe("PawSpectiveShell Phase 4 flow", () => {
     );
     expect(screen.getByText("1 objects")).toBeDefined();
     expect(mockedScore).not.toHaveBeenCalled();
+  });
+
+  it("renders a grounded Story Reel from corrected scored events", async () => {
+    mockedScore.mockResolvedValue(visibilityResponse());
+    mockedRenderStory.mockResolvedValue({
+      video: new Blob(["story-mp4"], { type: "video/mp4" }),
+      source: "gemini",
+    });
+    await reachResults();
+
+    fireEvent.change(screen.getByDisplayValue("blue ball"), {
+      target: { value: "green ball" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Calculate visibility & curiosity",
+      }),
+    );
+    await screen.findByText("75/100 cue score");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create Story Reel" }),
+    );
+
+    await screen.findByText("Story source: gemini");
+
+    expect(mockedRenderStory).toHaveBeenCalledTimes(1);
+    expect(mockedRenderStory.mock.calls[0][1][0].object_label).toBe(
+      "green ball",
+    );
+    expect(mockedRenderStory.mock.calls[0][2][0]).toEqual(
+      visibilityScore,
+    );
+    expect(mockedRenderStory.mock.calls[0][3]).toBe("ball");
+    expect(mockedRenderStory.mock.calls[0][4]).toMatchObject({
+      owner_name: "Kshitij",
+      dog_name: "Bruno",
+      favorite_interest: "Ball",
+    });
+    expect(mockedRenderStory.mock.calls[0][5]).toBeInstanceOf(
+      AbortSignal,
+    );
+
+    fireEvent.change(screen.getByDisplayValue("green ball"), {
+      target: { value: "yellow ball" },
+    });
+    expect(screen.queryByText("Story source: gemini")).toBeNull();
+  });
+
+  it("shows a retryable Story Reel error", async () => {
+    mockedScore.mockResolvedValue(visibilityResponse());
+    mockedRenderStory.mockRejectedValue(
+      new Error("The fictional dog voice is unavailable."),
+    );
+    await reachResults();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Calculate visibility & curiosity",
+      }),
+    );
+    await screen.findByText("75/100 cue score");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create Story Reel" }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert").textContent).toContain(
+        "fictional dog voice",
+      );
+    });
+    expect(
+      screen.getByRole("button", { name: "Create Story Reel" }),
+    ).toBeDefined();
   });
 
   it("returns to the lens with a safe analysis API error", async () => {

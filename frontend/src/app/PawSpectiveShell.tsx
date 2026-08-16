@@ -5,14 +5,17 @@ import type { ChangeEvent, FormEvent } from "react";
 
 import { CuriosityMap } from "./components/CuriosityMap";
 import { LiveDogLens } from "./components/LiveDogLens";
+import { StoryReel } from "./components/StoryReel";
 import { VisibilityInsight } from "./components/VisibilityInsight";
 import {
   analyzeCapturedClip,
+  renderCapturedStoryReel,
   scoreCapturedClip,
 } from "./lib/sceneAnalysisApi";
 import type {
   CapturedClip,
   SceneEvent,
+  StoryReelResult,
   VisibilityScore,
 } from "./types/sceneAnalysis";
 
@@ -27,7 +30,11 @@ type Profile = {
   photo: string;
 };
 
-type Stage = "profile" | "lens" | "processing" | "results";
+type Stage =
+  | "profile"
+  | "lens"
+  | "processing"
+  | "results";
 
 const personalityOptions = [
   "Curious",
@@ -75,39 +82,80 @@ export function PawSpectiveShell({
 }: {
   initialEvents: SceneEvent[];
 }) {
-  const [stage, setStage] = useState<Stage>("profile");
-  const [profile, setProfile] = useState(defaultProfile);
+  const [stage, setStage] =
+    useState<Stage>("profile");
+  const [profile, setProfile] =
+    useState(defaultProfile);
   const [visionMix, setVisionMix] = useState(72);
-  const [events, setEvents] = useState(initialEvents);
-  const [selectedEventId, setSelectedEventId] = useState(
-    initialEvents[0]?.event_id ?? "",
-  );
-  const [accuracyOpen, setAccuracyOpen] = useState(false);
+  const [events, setEvents] =
+    useState(initialEvents);
+  const [selectedEventId, setSelectedEventId] =
+    useState(
+      initialEvents[0]?.event_id ?? "",
+    );
+  const [accuracyOpen, setAccuracyOpen] =
+    useState(false);
   const [capturedClip, setCapturedClip] =
     useState<CapturedClip | null>(null);
   const [analysisError, setAnalysisError] =
     useState<string | null>(null);
   const [analysisSource, setAnalysisSource] =
-    useState<"gemini" | "demo" | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
-  const [visibilityScores, setVisibilityScores] = useState<
-    VisibilityScore[]
-  >([]);
-  const [visibilityWarnings, setVisibilityWarnings] = useState<
-    string[]
-  >([]);
-  const [visibilityError, setVisibilityError] = useState<
-    string | null
-  >(null);
-  const [isScoring, setIsScoring] = useState(false);
-  const visibilityRequestIdRef = useRef(0);
+    useState<"gemini" | "demo" | null>(
+      null,
+    );
+  const [isRecording, setIsRecording] =
+    useState(false);
+
+  const [
+    visibilityScores,
+    setVisibilityScores,
+  ] = useState<VisibilityScore[]>([]);
+  const [
+    visibilityWarnings,
+    setVisibilityWarnings,
+  ] = useState<string[]>([]);
+  const [
+    visibilityError,
+    setVisibilityError,
+  ] = useState<string | null>(null);
+  const [isScoring, setIsScoring] =
+    useState(false);
+
+  const visibilityRequestIdRef =
+    useRef(0);
   const visibilityAbortControllerRef =
     useRef<AbortController | null>(null);
 
+  const [storyResult, setStoryResult] =
+    useState<StoryReelResult | null>(null);
+  const [storyError, setStoryError] =
+    useState<string | null>(null);
+  const [
+    isRenderingStory,
+    setIsRenderingStory,
+  ] = useState(false);
+
+  const storyRequestIdRef = useRef(0);
+  const storyAbortControllerRef =
+    useRef<AbortController | null>(null);
+
+  function invalidateStoryReel() {
+    storyRequestIdRef.current += 1;
+    storyAbortControllerRef.current?.abort();
+    storyAbortControllerRef.current = null;
+
+    setIsRenderingStory(false);
+    setStoryResult(null);
+    setStoryError(null);
+  }
+
   function invalidateVisibilityScores() {
+    invalidateStoryReel();
+
     visibilityRequestIdRef.current += 1;
     visibilityAbortControllerRef.current?.abort();
     visibilityAbortControllerRef.current = null;
+
     setIsScoring(false);
     setVisibilityScores([]);
     setVisibilityWarnings([]);
@@ -118,10 +166,15 @@ export function PawSpectiveShell({
     return () => {
       visibilityRequestIdRef.current += 1;
       visibilityAbortControllerRef.current?.abort();
+
+      storyRequestIdRef.current += 1;
+      storyAbortControllerRef.current?.abort();
     };
   }, []);
 
-  function updateProfile<K extends keyof Profile>(
+  function updateProfile<
+    K extends keyof Profile,
+  >(
     key: K,
     value: Profile[K],
   ) {
@@ -131,21 +184,29 @@ export function PawSpectiveShell({
     }));
   }
 
-  function togglePersonality(personality: string) {
+  function togglePersonality(
+    personality: string,
+  ) {
     setProfile((current) => {
       const selected =
-        current.personalities.includes(personality);
+        current.personalities.includes(
+          personality,
+        );
 
       if (selected) {
         return {
           ...current,
-          personalities: current.personalities.filter(
-            (item) => item !== personality,
-          ),
+          personalities:
+            current.personalities.filter(
+              (item) =>
+                item !== personality,
+            ),
         };
       }
 
-      if (current.personalities.length >= 2) {
+      if (
+        current.personalities.length >= 2
+      ) {
         return current;
       }
 
@@ -171,8 +232,13 @@ export function PawSpectiveShell({
     const reader = new FileReader();
 
     reader.onload = () => {
-      if (typeof reader.result === "string") {
-        updateProfile("photo", reader.result);
+      if (
+        typeof reader.result === "string"
+      ) {
+        updateProfile(
+          "photo",
+          reader.result,
+        );
       }
     };
 
@@ -193,6 +259,13 @@ export function PawSpectiveShell({
     invalidateVisibilityScores();
   }
 
+  function selectEvent(
+    eventId: string,
+  ) {
+    invalidateStoryReel();
+    setSelectedEventId(eventId);
+  }
+
   async function beginSceneAnalysis() {
     if (!capturedClip) {
       return;
@@ -206,11 +279,14 @@ export function PawSpectiveShell({
 
     try {
       const response =
-        await analyzeCapturedClip(capturedClip);
+        await analyzeCapturedClip(
+          capturedClip,
+        );
 
       setEvents(response.analysis.events);
       setSelectedEventId(
-        response.analysis.events[0]?.event_id ?? "",
+        response.analysis.events[0]
+          ?.event_id ?? "",
       );
       setAnalysisSource(response.source);
       setStage("results");
@@ -225,7 +301,10 @@ export function PawSpectiveShell({
   }
 
   async function calculateVisibility() {
-    if (!capturedClip || events.length === 0) {
+    if (
+      !capturedClip ||
+      events.length === 0
+    ) {
       return;
     }
 
@@ -236,13 +315,18 @@ export function PawSpectiveShell({
       return;
     }
 
+    invalidateStoryReel();
     visibilityAbortControllerRef.current?.abort();
 
-    const requestId = visibilityRequestIdRef.current + 1;
-    const abortController = new AbortController();
+    const requestId =
+      visibilityRequestIdRef.current + 1;
+    const abortController =
+      new AbortController();
 
-    visibilityRequestIdRef.current = requestId;
-    visibilityAbortControllerRef.current = abortController;
+    visibilityRequestIdRef.current =
+      requestId;
+    visibilityAbortControllerRef.current =
+      abortController;
 
     setIsScoring(true);
     setVisibilityScores([]);
@@ -250,28 +334,36 @@ export function PawSpectiveShell({
     setVisibilityWarnings([]);
 
     try {
-      const response = await scoreCapturedClip(
-        capturedClip,
-        events.map((event) => ({
-          ...event,
-          object_label: event.object_label.trim(),
-        })),
-        profile.favorite,
-        abortController.signal,
-      );
+      const response =
+        await scoreCapturedClip(
+          capturedClip,
+          events.map((event) => ({
+            ...event,
+            object_label:
+              event.object_label.trim(),
+          })),
+          profile.favorite,
+          abortController.signal,
+        );
 
       if (
-        requestId !== visibilityRequestIdRef.current ||
+        requestId !==
+          visibilityRequestIdRef.current ||
         abortController.signal.aborted
       ) {
         return;
       }
 
-      setVisibilityScores(response.scores);
-      setVisibilityWarnings(response.warnings);
+      setVisibilityScores(
+        response.scores,
+      );
+      setVisibilityWarnings(
+        response.warnings,
+      );
     } catch (error) {
       if (
-        requestId !== visibilityRequestIdRef.current ||
+        requestId !==
+          visibilityRequestIdRef.current ||
         abortController.signal.aborted ||
         (error instanceof DOMException &&
           error.name === "AbortError")
@@ -285,9 +377,114 @@ export function PawSpectiveShell({
           : "Visibility scoring failed.",
       );
     } finally {
-      if (requestId === visibilityRequestIdRef.current) {
-        visibilityAbortControllerRef.current = null;
+      if (
+        requestId ===
+        visibilityRequestIdRef.current
+      ) {
+        visibilityAbortControllerRef.current =
+          null;
         setIsScoring(false);
+      }
+    }
+  }
+
+  async function createStoryReel() {
+    if (
+      !capturedClip ||
+      analysisSource !== "gemini" ||
+      visibilityScores.length === 0 ||
+      !selectedEventId
+    ) {
+      return;
+    }
+
+    const selectedHasScore =
+      visibilityScores.some(
+        (score) =>
+          score.event_id ===
+          selectedEventId,
+      );
+
+    if (!selectedHasScore) {
+      setStoryError(
+        "Select an object that has a completed visibility score.",
+      );
+      return;
+    }
+
+    storyAbortControllerRef.current?.abort();
+
+    const requestId =
+      storyRequestIdRef.current + 1;
+    const abortController =
+      new AbortController();
+
+    storyRequestIdRef.current =
+      requestId;
+    storyAbortControllerRef.current =
+      abortController;
+
+    setIsRenderingStory(true);
+    setStoryResult(null);
+    setStoryError(null);
+
+    try {
+      const result =
+        await renderCapturedStoryReel(
+          capturedClip,
+          events,
+          visibilityScores,
+          selectedEventId,
+          {
+            owner_name:
+              profile.ownerName,
+            dog_name:
+              profile.dogName ||
+              "Co-pilot",
+            breed: profile.breed,
+            age: profile.age,
+            size: profile.size,
+            personality_tags:
+              profile.personalities,
+            favorite_interest:
+              profile.favorite,
+          },
+          abortController.signal,
+        );
+
+      if (
+        requestId !==
+          storyRequestIdRef.current ||
+        abortController.signal.aborted
+      ) {
+        return;
+      }
+
+      setStoryResult(result);
+    } catch (error) {
+      if (
+        requestId !==
+          storyRequestIdRef.current ||
+        abortController.signal.aborted ||
+        (error instanceof DOMException &&
+          error.name === "AbortError")
+      ) {
+        return;
+      }
+
+      setStoryError(
+        error instanceof Error
+          ? error.message
+          : "Story Reel generation failed.",
+      );
+    } finally {
+      if (
+        requestId ===
+        storyRequestIdRef.current
+      ) {
+        storyAbortControllerRef.current =
+          null;
+        setIsRenderingStory(false);
       }
     }
   }
@@ -317,15 +514,20 @@ export function PawSpectiveShell({
     );
   }
 
-  function removeEvent(eventId: string) {
+  function removeEvent(
+    eventId: string,
+  ) {
     invalidateVisibilityScores();
 
     setEvents((current) => {
       const remaining = current.filter(
-        (event) => event.event_id !== eventId,
+        (event) =>
+          event.event_id !== eventId,
       );
 
-      if (selectedEventId === eventId) {
+      if (
+        selectedEventId === eventId
+      ) {
         setSelectedEventId(
           remaining[0]?.event_id ?? "",
         );
@@ -340,13 +542,20 @@ export function PawSpectiveShell({
   );
 
   const selectedEvent = events.find(
-    (event) => event.event_id === selectedEventId,
+    (event) =>
+      event.event_id ===
+      selectedEventId,
   );
 
   const selectedVisibilityScore =
     visibilityScores.find(
-      (score) => score.event_id === selectedEventId,
+      (score) =>
+        score.event_id ===
+        selectedEventId,
     );
+
+  const isResultsBusy =
+    isScoring || isRenderingStory;
 
   return (
     <main className="app-shell">
@@ -361,25 +570,33 @@ export function PawSpectiveShell({
           }}
           aria-label="Return to profile"
         >
-          <span className="brand-mark">P</span>
+          <span className="brand-mark">
+            P
+          </span>
 
           <span>
-            <strong>PawSpective</strong>
+            <strong>
+              PawSpective
+            </strong>
+
             <small>
-              Closer to their point of view
+              Closer to their point of
+              view
             </small>
           </span>
         </button>
 
         <div className="topbar-actions">
           <span className="phase-badge">
-            Phase 4 · Visibility &amp; Curiosity
+            Phase 5 · Story Reel
           </span>
 
           <button
             className="text-button"
             type="button"
-            onClick={() => setAccuracyOpen(true)}
+            onClick={() =>
+              setAccuracyOpen(true)
+            }
           >
             How accurate is this?
           </button>
@@ -390,58 +607,79 @@ export function PawSpectiveShell({
         className="progress"
         aria-label="Experience progress"
       >
-        {stages.map((item, index) => {
-          const completed = index < stageIndex;
-          const active = item.id === stage;
+        {stages.map(
+          (item, index) => {
+            const completed =
+              index < stageIndex;
+            const active =
+              item.id === stage;
 
-          return (
-            <div
-              className={[
-                "progress-step",
-                active ? "active" : "",
-                completed ? "completed" : "",
-              ].join(" ")}
-              key={item.id}
-            >
-              <span>
-                {completed ? "✓" : index + 1}
-              </span>
-              <small>{item.label}</small>
-            </div>
-          );
-        })}
+            return (
+              <div
+                className={[
+                  "progress-step",
+                  active
+                    ? "active"
+                    : "",
+                  completed
+                    ? "completed"
+                    : "",
+                ].join(" ")}
+                key={item.id}
+              >
+                <span>
+                  {completed
+                    ? "✓"
+                    : index + 1}
+                </span>
+
+                <small>
+                  {item.label}
+                </small>
+              </div>
+            );
+          },
+        )}
       </nav>
 
       {stage === "profile" && (
         <section className="screen profile-screen">
           <div className="intro-copy">
             <p className="eyebrow">
-              Tell us about your co-pilot
+              Tell us about your
+              co-pilot
             </p>
 
             <h1>
-              Meet the world from a slightly more{" "}
-              <em>dog-shaped</em> perspective.
+              Meet the world from a
+              slightly more{" "}
+              <em>dog-shaped</em>{" "}
+              perspective.
             </h1>
 
             <p className="lead">
-              We use size to guide camera height.
-              Personality and favorites personalize Story
-              Mode—they never alter the scientific vision
-              filter.
+              We use size to guide camera
+              height. Personality and
+              favorites personalize Story
+              Mode—they never alter the
+              scientific vision filter.
             </p>
 
             <button
               className="accuracy-card"
               type="button"
-              onClick={() => setAccuracyOpen(true)}
+              onClick={() =>
+                setAccuracyOpen(true)
+              }
             >
               <span>◉</span>
 
               <span>
                 <strong>
-                  Science and imagination stay separate
+                  Science and imagination
+                  stay separate
                 </strong>
+
                 <small>
                   Open the Accuracy Drawer
                 </small>
@@ -473,9 +711,13 @@ export function PawSpectiveShell({
               </label>
 
               <div>
-                <strong>Dog photo</strong>
+                <strong>
+                  Dog photo
+                </strong>
+
                 <small>
-                  Optional · used as the profile avatar
+                  Optional · used as the
+                  profile avatar
                 </small>
               </div>
             </div>
@@ -486,7 +728,9 @@ export function PawSpectiveShell({
 
                 <input
                   required
-                  value={profile.ownerName}
+                  value={
+                    profile.ownerName
+                  }
                   onChange={(event) =>
                     updateProfile(
                       "ownerName",
@@ -502,7 +746,9 @@ export function PawSpectiveShell({
 
                 <input
                   required
-                  value={profile.dogName}
+                  value={
+                    profile.dogName
+                  }
                   onChange={(event) =>
                     updateProfile(
                       "dogName",
@@ -543,9 +789,15 @@ export function PawSpectiveShell({
                     )
                   }
                 >
-                  <option>Puppy</option>
-                  <option>Adult</option>
-                  <option>Senior</option>
+                  <option>
+                    Puppy
+                  </option>
+                  <option>
+                    Adult
+                  </option>
+                  <option>
+                    Senior
+                  </option>
                 </select>
               </label>
 
@@ -562,9 +814,15 @@ export function PawSpectiveShell({
                     )
                   }
                 >
-                  <option>Small</option>
-                  <option>Medium</option>
-                  <option>Large</option>
+                  <option>
+                    Small
+                  </option>
+                  <option>
+                    Medium
+                  </option>
+                  <option>
+                    Large
+                  </option>
                 </select>
               </label>
             </div>
@@ -572,7 +830,10 @@ export function PawSpectiveShell({
             <fieldset>
               <legend>
                 Personality{" "}
-                <span>Choose up to two</span>
+
+                <span>
+                  Choose up to two
+                </span>
               </legend>
 
               <div className="choice-row">
@@ -592,7 +853,9 @@ export function PawSpectiveShell({
                         }
                         type="button"
                         key={personality}
-                        aria-pressed={selected}
+                        aria-pressed={
+                          selected
+                        }
                         onClick={() =>
                           togglePersonality(
                             personality,
@@ -611,7 +874,9 @@ export function PawSpectiveShell({
               Favorite thing
 
               <select
-                value={profile.favorite}
+                value={
+                  profile.favorite
+                }
                 onChange={(event) =>
                   updateProfile(
                     "favorite",
@@ -619,11 +884,15 @@ export function PawSpectiveShell({
                   )
                 }
               >
-                {favoriteOptions.map((favorite) => (
-                  <option key={favorite}>
-                    {favorite}
-                  </option>
-                ))}
+                {favoriteOptions.map(
+                  (favorite) => (
+                    <option
+                      key={favorite}
+                    >
+                      {favorite}
+                    </option>
+                  ),
+                )}
               </select>
             </label>
 
@@ -631,7 +900,8 @@ export function PawSpectiveShell({
               className="primary-button"
               type="submit"
             >
-              Meet my co-pilot <span>→</span>
+              Meet my co-pilot{" "}
+              <span>→</span>
             </button>
           </form>
         </section>
@@ -647,15 +917,22 @@ export function PawSpectiveShell({
 
               <h1>
                 Welcome,{" "}
-                {profile.dogName || "co-pilot"}.
+                {profile.dogName ||
+                  "co-pilot"}
+                .
               </h1>
             </div>
 
             <button
               className="secondary-button"
               type="button"
-              disabled={isRecording}
-              onClick={() => setStage("profile")}
+              disabled={
+                isRecording ||
+                isResultsBusy
+              }
+              onClick={() =>
+                setStage("profile")
+              }
             >
               Edit profile
             </button>
@@ -664,9 +941,15 @@ export function PawSpectiveShell({
           <div className="lens-layout">
             <LiveDogLens
               visionMix={visionMix}
-              onVisionMixChange={setVisionMix}
-              onClipChange={handleClipChange}
-              onRecordingChange={setIsRecording}
+              onVisionMixChange={
+                setVisionMix
+              }
+              onClipChange={
+                handleClipChange
+              }
+              onRecordingChange={
+                setIsRecording
+              }
             />
 
             <aside className="lens-sidebar">
@@ -675,7 +958,9 @@ export function PawSpectiveShell({
                   {profile.photo ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={profile.photo}
+                      src={
+                        profile.photo
+                      }
                       alt=""
                     />
                   ) : (
@@ -686,7 +971,8 @@ export function PawSpectiveShell({
                 <div>
                   <p>
                     Meet{" "}
-                    {profile.dogName || "your dog"}
+                    {profile.dogName ||
+                      "your dog"}
                   </p>
 
                   <small>
@@ -706,7 +992,8 @@ export function PawSpectiveShell({
                   </strong>
 
                   <p>
-                    Position it approximately at your
+                    Position it
+                    approximately at your
                     dog&apos;s eye height.
                   </p>
                 </div>
@@ -721,17 +1008,20 @@ export function PawSpectiveShell({
                   </strong>
 
                   <p>
-                    This is an approximate point of
-                    view—not gaze tracking.
+                    This is an approximate
+                    point of view—not gaze
+                    tracking.
                   </p>
                 </div>
               </div>
 
               <div className="mock-notice">
-                Record or upload a short clip. Gemini
-                identifies visibly supported objects.
-                After reviewing them, you can calculate
-                deterministic visibility and Curiosity
+                Record or upload a short
+                clip. Gemini identifies
+                visibly supported objects.
+                After reviewing them, you
+                can calculate deterministic
+                visibility and Curiosity
                 scores.
               </div>
 
@@ -750,8 +1040,11 @@ export function PawSpectiveShell({
                 disabled={
                   !capturedClip ||
                   isRecording ||
-                  capturedClip.durationMs < 5_000 ||
-                  capturedClip.durationMs > 15_000
+                  isResultsBusy ||
+                  capturedClip.durationMs <
+                    5_000 ||
+                  capturedClip.durationMs >
+                    15_000
                 }
                 onClick={() =>
                   void beginSceneAnalysis()
@@ -774,11 +1067,15 @@ export function PawSpectiveShell({
             AI scene analysis
           </p>
 
-          <h1>Finding visible scene signals…</h1>
+          <h1>
+            Finding visible scene
+            signals…
+          </h1>
 
           <p className="lead">
-            The video is being validated, normalized,
-            and analyzed against the strict Phase 0
+            The video is being validated,
+            normalized, and analyzed
+            against the strict Phase 0
             scene contract.
           </p>
 
@@ -786,9 +1083,11 @@ export function PawSpectiveShell({
             <span className="done">
               ✓ Clip uploaded
             </span>
+
             <span className="loading">
               ● Checking visible objects
             </span>
+
             <span>
               ○ Validating scene timeline
             </span>
@@ -805,7 +1104,8 @@ export function PawSpectiveShell({
               </p>
 
               <h1>
-                {profile.dogName || "Your dog"}
+                {profile.dogName ||
+                  "Your dog"}
                 &apos;s visible scene
               </h1>
             </div>
@@ -813,7 +1113,7 @@ export function PawSpectiveShell({
             <button
               className="secondary-button"
               type="button"
-              disabled={isScoring}
+              disabled={isResultsBusy}
               onClick={() => {
                 setCapturedClip(null);
                 setAnalysisError(null);
@@ -830,8 +1130,9 @@ export function PawSpectiveShell({
 
           {analysisSource === "demo" && (
             <div className="mock-notice">
-              Gemini was unavailable or demo mode is
-              enabled. The validated cached response is
+              Gemini was unavailable or
+              demo mode is enabled. The
+              validated cached response is
               being shown.
             </div>
           )}
@@ -843,8 +1144,10 @@ export function PawSpectiveShell({
                   <span className="label ai">
                     AI-inferred
                   </span>
+
                   <h2>
-                    Review detected objects
+                    Review detected
+                    objects
                   </h2>
                 </div>
 
@@ -854,9 +1157,9 @@ export function PawSpectiveShell({
               </div>
 
               <p>
-                Rename or remove anything incorrect.
-                Your corrections become the source of
-                truth.
+                Rename or remove anything
+                incorrect. Your corrections
+                become the source of truth.
               </p>
 
               <div className="event-list">
@@ -873,9 +1176,11 @@ export function PawSpectiveShell({
                         event.event_id
                       }
                       aria-label={`Use ${event.object_label} for visibility analysis`}
-                      disabled={isScoring}
+                      disabled={
+                        isResultsBusy
+                      }
                       onChange={() =>
-                        setSelectedEventId(
+                        selectEvent(
                           event.event_id,
                         )
                       }
@@ -884,18 +1189,29 @@ export function PawSpectiveShell({
                     <div>
                       <input
                         className="event-name"
-                        value={event.object_label}
-                        disabled={isScoring}
-                        onChange={(changeEvent) =>
+                        value={
+                          event.object_label
+                        }
+                        disabled={
+                          isResultsBusy
+                        }
+                        onChange={(
+                          changeEvent,
+                        ) =>
                           renameEvent(
                             event.event_id,
-                            changeEvent.target.value,
+                            changeEvent
+                              .target.value,
                           )
                         }
-                        onBlur={(blurEvent) =>
+                        onBlur={(
+                          blurEvent,
+                        ) =>
                           renameEvent(
                             event.event_id,
-                            blurEvent.target.value.trim(),
+                            blurEvent
+                              .target.value
+                              .trim(),
                           )
                         }
                       />
@@ -906,7 +1222,8 @@ export function PawSpectiveShell({
                         )}{" "}
                         ·{" "}
                         {Math.round(
-                          event.confidence * 100,
+                          event.confidence *
+                            100,
                         )}
                         % confidence
                       </small>
@@ -915,9 +1232,13 @@ export function PawSpectiveShell({
                     <button
                       type="button"
                       aria-label={`Remove ${event.object_label}`}
-                      disabled={isScoring}
+                      disabled={
+                        isResultsBusy
+                      }
                       onClick={() =>
-                        removeEvent(event.event_id)
+                        removeEvent(
+                          event.event_id,
+                        )
                       }
                     >
                       Remove
@@ -927,8 +1248,9 @@ export function PawSpectiveShell({
 
                 {events.length === 0 && (
                   <p className="empty-state">
-                    No objects remain. Return to Dog
-                    Lens to analyze another clip.
+                    No objects remain.
+                    Return to Dog Lens to
+                    analyze another clip.
                   </p>
                 )}
               </div>
@@ -937,9 +1259,10 @@ export function PawSpectiveShell({
                 className="primary-button"
                 type="button"
                 disabled={
-                  isScoring ||
+                  isResultsBusy ||
                   events.length === 0 ||
-                  analysisSource !== "gemini"
+                  analysisSource !==
+                    "gemini"
                 }
                 onClick={() =>
                   void calculateVisibility()
@@ -950,11 +1273,14 @@ export function PawSpectiveShell({
                   : "Calculate visibility & curiosity"}
               </button>
 
-              {analysisSource === "demo" && (
+              {analysisSource ===
+                "demo" && (
                 <p className="phase-note">
-                  Visibility scoring is disabled because
-                  cached bounding boxes do not belong to
-                  this uploaded clip.
+                  Visibility scoring is
+                  disabled because cached
+                  bounding boxes do not
+                  belong to this uploaded
+                  clip.
                 </p>
               )}
 
@@ -967,7 +1293,8 @@ export function PawSpectiveShell({
                 </div>
               )}
 
-              {visibilityWarnings.length > 0 && (
+              {visibilityWarnings.length >
+                0 && (
                 <div className="score-warnings">
                   {visibilityWarnings.map(
                     (warning) => (
@@ -984,10 +1311,13 @@ export function PawSpectiveShell({
               <div className="card-heading">
                 <div>
                   <span className="label ai">
-                    AI boxes + deterministic weighting
+                    AI boxes +
+                    deterministic weighting
                   </span>
 
-                  <h2>Curiosity Map</h2>
+                  <h2>
+                    Curiosity Map
+                  </h2>
                 </div>
               </div>
 
@@ -995,17 +1325,20 @@ export function PawSpectiveShell({
                 <CuriosityMap
                   clip={capturedClip}
                   events={events}
-                  scores={visibilityScores}
+                  scores={
+                    visibilityScores
+                  }
                   selectedEventId={
                     selectedEventId
                   }
                   onSelect={
-                    setSelectedEventId
+                    selectEvent
                   }
                 />
               ) : (
                 <p>
-                  The original clip is unavailable.
+                  The original clip is
+                  unavailable.
                 </p>
               )}
             </section>
@@ -1014,16 +1347,20 @@ export function PawSpectiveShell({
               <div className="card-heading">
                 <div>
                   <span className="label science">
-                    Measured + AI-labeled inputs
+                    Measured +
+                    AI-labeled inputs
                   </span>
 
-                  <h2>Visibility insight</h2>
+                  <h2>
+                    Visibility insight
+                  </h2>
                 </div>
 
                 {selectedVisibilityScore && (
                   <span>
                     {
-                      selectedVisibilityScore.salience_score
+                      selectedVisibilityScore
+                        .salience_score
                     }
                     /100 cue score
                   </span>
@@ -1032,7 +1369,9 @@ export function PawSpectiveShell({
 
               <VisibilityInsight
                 event={selectedEvent}
-                score={selectedVisibilityScore}
+                score={
+                  selectedVisibilityScore
+                }
               />
             </section>
 
@@ -1040,34 +1379,35 @@ export function PawSpectiveShell({
               <div className="card-heading">
                 <div>
                   <span className="label fun">
-                    Phase 5 preview
+                    Just for fun
                   </span>
-                  <h2>Story Reel preview</h2>
+
+                  <h2>
+                    Story Reel
+                  </h2>
                 </div>
               </div>
 
-              <blockquote>
-                “At 14:03,{" "}
-                {profile.dogName ||
-                  "our investigator"}{" "}
-                entered the garden. The human
-                believed the objective was exercise.
-                The evidence pointed toward one
-                suspicious blue ball.”
-              </blockquote>
-
-              <p>
-                Nature documentary · fictional dog
-                voice · approximately 18 seconds
-              </p>
-
-              <button
-                className="secondary-button"
-                type="button"
-                disabled
-              >
-                Audio arrives in a later phase
-              </button>
+              <StoryReel
+                dogName={
+                  profile.dogName
+                }
+                result={storyResult}
+                isRendering={
+                  isRenderingStory
+                }
+                error={storyError}
+                disabled={
+                  analysisSource !==
+                    "gemini" ||
+                  visibilityScores.length ===
+                    0 ||
+                  isScoring
+                }
+                onRender={() =>
+                  void createStoryReel()
+                }
+              />
             </section>
           </div>
         </section>
@@ -1077,8 +1417,8 @@ export function PawSpectiveShell({
         <span>PawSpective</span>
 
         <p>
-          Fun enough to share. Transparent enough to
-          trust.
+          Fun enough to share.
+          Transparent enough to trust.
         </p>
       </footer>
 
@@ -1115,7 +1455,8 @@ export function PawSpectiveShell({
             </p>
 
             <h2 id="accuracy-title">
-              How PawSpective reaches a result
+              How PawSpective reaches a
+              result
             </h2>
 
             <div className="accuracy-section">
@@ -1129,10 +1470,14 @@ export function PawSpectiveShell({
                 </strong>
 
                 <p>
-                  Canine color transformation and
-                  foreground/background contrast
-                  calculation, apparent-size measurement,
-                  and deterministic score weighting.
+                  Canine color
+                  transformation and
+                  foreground/background
+                  contrast calculation,
+                  apparent-size
+                  measurement, and
+                  deterministic score
+                  weighting.
                 </p>
               </div>
             </div>
@@ -1143,12 +1488,16 @@ export function PawSpectiveShell({
               </span>
 
               <div>
-                <strong>AI-inferred</strong>
+                <strong>
+                  AI-inferred
+                </strong>
 
                 <p>
-                  Object identification, bounding
-                  boxes, ordinal motion labels, and
-                  possible visible attention cues.
+                  Object identification,
+                  bounding boxes, ordinal
+                  motion labels, and
+                  possible visible
+                  attention cues.
                 </p>
               </div>
             </div>
@@ -1159,20 +1508,23 @@ export function PawSpectiveShell({
               </span>
 
               <div>
-                <strong>Just for fun</strong>
+                <strong>
+                  Just for fun
+                </strong>
 
                 <p>
-                  Fictional dog narration, cat
-                  commentary and playful story
-                  framing.
+                  Fictional dog narration,
+                  cat commentary and
+                  playful story framing.
                 </p>
               </div>
             </div>
 
             <div className="accuracy-warning">
-              PawSpective never claims to read a
-              dog&apos;s exact gaze, thoughts,
-              feelings or sense of smell.
+              PawSpective never claims to
+              read a dog&apos;s exact gaze,
+              thoughts, feelings or sense
+              of smell.
             </div>
           </aside>
         </div>

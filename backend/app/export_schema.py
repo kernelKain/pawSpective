@@ -3,6 +3,8 @@ from pathlib import Path
 
 from backend.app.contracts import (
     SceneAnalysisResponse,
+    StoryReelRequest,
+    StoryScriptResponse,
     VisibilityAnalysisResponse,
 )
 
@@ -12,6 +14,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SCHEMAS = {
     "scene-analysis.schema.json": SceneAnalysisResponse,
     "visibility-analysis.schema.json": VisibilityAnalysisResponse,
+    "story-reel-request.schema.json": StoryReelRequest,
+    "story-script.schema.json": StoryScriptResponse,
 }
 
 

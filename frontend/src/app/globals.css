@@ -1719,6 +1719,69 @@ footer p {
   line-height: 1.55;
 }
 
+.story-card {
+  grid-column: 1 / -1;
+}
+
+.story-reel {
+  display: grid;
+  gap: 1rem;
+}
+
+.story-reel-empty {
+  display: grid;
+  gap: 1rem;
+  justify-items: start;
+  padding: 1.25rem;
+  border: 1px dashed var(--line);
+  border-radius: 18px;
+  background: rgba(243, 200, 82, 0.08);
+}
+
+.story-reel-video {
+  display: block;
+  width: min(100%, 360px);
+  aspect-ratio: 9 / 16;
+  margin-inline: auto;
+  border-radius: 22px;
+  background: #101813;
+  box-shadow: var(--shadow);
+}
+
+.story-reel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.story-reel-actions p {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+.download-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+@media (max-width: 680px) {
+  .story-reel-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .story-reel-actions a,
+  .story-reel-actions button {
+    width: 100%;
+  }
+}
+
 @keyframes cue-pulse {
   0%,
   100% {

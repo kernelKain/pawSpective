@@ -1,0 +1,353 @@
+{
+  "$defs": {
+    "MotionLevel": {
+      "enum": [
+        "none",
+        "low",
+        "medium",
+        "high"
+      ],
+      "title": "MotionLevel",
+      "type": "string"
+    },
+    "NormalizedBoundingBox": {
+      "additionalProperties": false,
+      "description": "Bounding box coordinates expressed from 0.0 to 1.0.",
+      "properties": {
+        "x_min": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "X Min",
+          "type": "number"
+        },
+        "y_min": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Y Min",
+          "type": "number"
+        },
+        "x_max": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "X Max",
+          "type": "number"
+        },
+        "y_max": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Y Max",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x_min",
+        "y_min",
+        "x_max",
+        "y_max"
+      ],
+      "title": "NormalizedBoundingBox",
+      "type": "object"
+    },
+    "ObjectCategory": {
+      "enum": [
+        "person",
+        "animal",
+        "toy",
+        "food",
+        "vehicle",
+        "environment",
+        "other"
+      ],
+      "title": "ObjectCategory",
+      "type": "string"
+    },
+    "SalienceLevel": {
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "title": "SalienceLevel",
+      "type": "string"
+    },
+    "SceneEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "event_id": {
+          "maxLength": 50,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]*$",
+          "title": "Event Id",
+          "type": "string"
+        },
+        "timestamp_ms": {
+          "minimum": 0,
+          "title": "Timestamp Ms",
+          "type": "integer"
+        },
+        "object_label": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Object Label",
+          "type": "string"
+        },
+        "category": {
+          "$ref": "#/$defs/ObjectCategory"
+        },
+        "bounding_box": {
+          "$ref": "#/$defs/NormalizedBoundingBox"
+        },
+        "confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "visible_evidence": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Visible Evidence",
+          "type": "string"
+        },
+        "motion_level": {
+          "$ref": "#/$defs/MotionLevel"
+        }
+      },
+      "required": [
+        "event_id",
+        "timestamp_ms",
+        "object_label",
+        "category",
+        "bounding_box",
+        "confidence",
+        "visible_evidence",
+        "motion_level"
+      ],
+      "title": "SceneEvent",
+      "type": "object"
+    },
+    "StoryProfile": {
+      "additionalProperties": false,
+      "properties": {
+        "owner_name": {
+          "default": "",
+          "maxLength": 60,
+          "title": "Owner Name",
+          "type": "string"
+        },
+        "dog_name": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Dog Name",
+          "type": "string"
+        },
+        "breed": {
+          "default": "",
+          "maxLength": 80,
+          "title": "Breed",
+          "type": "string"
+        },
+        "age": {
+          "enum": [
+            "Puppy",
+            "Adult",
+            "Senior"
+          ],
+          "title": "Age",
+          "type": "string"
+        },
+        "size": {
+          "enum": [
+            "Small",
+            "Medium",
+            "Large"
+          ],
+          "title": "Size",
+          "type": "string"
+        },
+        "personality_tags": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 2,
+          "title": "Personality Tags",
+          "type": "array"
+        },
+        "favorite_interest": {
+          "default": "",
+          "maxLength": 40,
+          "title": "Favorite Interest",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dog_name",
+        "age",
+        "size"
+      ],
+      "title": "StoryProfile",
+      "type": "object"
+    },
+    "VisibilityScore": {
+      "additionalProperties": false,
+      "properties": {
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "identification_confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Identification Confidence",
+          "type": "number"
+        },
+        "human_contrast_score": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Human Contrast Score",
+          "type": "integer"
+        },
+        "dog_contrast_score": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Dog Contrast Score",
+          "type": "integer"
+        },
+        "contrast_change": {
+          "maximum": 100,
+          "minimum": -100,
+          "title": "Contrast Change",
+          "type": "integer"
+        },
+        "motion_score": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Motion Score",
+          "type": "integer"
+        },
+        "apparent_size_score": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Apparent Size Score",
+          "type": "integer"
+        },
+        "profile_relevance_score": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Profile Relevance Score",
+          "type": "integer"
+        },
+        "salience_score": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Salience Score",
+          "type": "integer"
+        },
+        "salience_level": {
+          "$ref": "#/$defs/SalienceLevel"
+        },
+        "human_object_color": {
+          "pattern": "^#[0-9A-F]{6}$",
+          "title": "Human Object Color",
+          "type": "string"
+        },
+        "human_background_color": {
+          "pattern": "^#[0-9A-F]{6}$",
+          "title": "Human Background Color",
+          "type": "string"
+        },
+        "dog_object_color": {
+          "pattern": "^#[0-9A-F]{6}$",
+          "title": "Dog Object Color",
+          "type": "string"
+        },
+        "dog_background_color": {
+          "pattern": "^#[0-9A-F]{6}$",
+          "title": "Dog Background Color",
+          "type": "string"
+        },
+        "explanation": {
+          "maxLength": 400,
+          "minLength": 1,
+          "title": "Explanation",
+          "type": "string"
+        },
+        "why": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 4,
+          "title": "Why",
+          "type": "array"
+        }
+      },
+      "required": [
+        "event_id",
+        "identification_confidence",
+        "human_contrast_score",
+        "dog_contrast_score",
+        "contrast_change",
+        "motion_score",
+        "apparent_size_score",
+        "profile_relevance_score",
+        "salience_score",
+        "salience_level",
+        "human_object_color",
+        "human_background_color",
+        "dog_object_color",
+        "dog_background_color",
+        "explanation"
+      ],
+      "title": "VisibilityScore",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "analysis_source": {
+      "const": "gemini",
+      "title": "Analysis Source",
+      "type": "string"
+    },
+    "style": {
+      "const": "nature_documentary",
+      "default": "nature_documentary",
+      "title": "Style",
+      "type": "string"
+    },
+    "profile": {
+      "$ref": "#/$defs/StoryProfile"
+    },
+    "events": {
+      "items": {
+        "$ref": "#/$defs/SceneEvent"
+      },
+      "maxItems": 12,
+      "minItems": 1,
+      "title": "Events",
+      "type": "array"
+    },
+    "scores": {
+      "items": {
+        "$ref": "#/$defs/VisibilityScore"
+      },
+      "maxItems": 12,
+      "minItems": 1,
+      "title": "Scores",
+      "type": "array"
+    },
+    "featured_event_id": {
+      "title": "Featured Event Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "analysis_source",
+    "profile",
+    "events",
+    "scores",
+    "featured_event_id"
+  ],
+  "title": "StoryReelRequest",
+  "type": "object"
+}
