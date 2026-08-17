@@ -18,6 +18,7 @@ Set these production variables on the backend host:
 ```dotenv
 GEMINI_API_KEY=...
 GEMINI_MODEL=gemini-3.6-flash
+GEMINI_ANALYSIS_FALLBACK_MODEL=gemini-3.1-flash-lite
 ELEVENLABS_API_KEY=...
 ELEVENLABS_DOG_VOICE_ID=...
 ELEVENLABS_MODEL_ID=eleven_flash_v2_5
@@ -28,6 +29,11 @@ PAWSPECTIVE_CORS_ORIGINS=https://your-project.vercel.app
 PAWSPECTIVE_MEDIA_DIRECTORY=/data/media
 PAWSPECTIVE_JOBS_DIRECTORY=/data/jobs
 PAWSPECTIVE_JOB_DATABASE=/data/jobs.sqlite3
+PAWSPECTIVE_ANIMATION_ENABLED=true
+PAWSPECTIVE_OMNI_VIDEO_MODEL=gemini-omni-flash-preview
+PAWSPECTIVE_VEO_VIDEO_MODEL=veo-3.1-fast-generate-preview
+PAWSPECTIVE_ANIMATION_TIMEOUT_SECONDS=420
+PAWSPECTIVE_ALLOW_LOCAL_ANIMATION_FALLBACK=true
 ```
 
 Use comma-separated exact origins for production and preview domains. Do not
@@ -39,6 +45,9 @@ Invoke-RestMethod https://api.example.com/api/v1/health/ready
 
 Enable `PAWSPECTIVE_CONTROLLED_DEMO_ENABLED` only after following the
 [controlled-demo guide](controlled-demo.md) and deploying the complete cache.
+The backend account must have paid preview access to the selected animation
+model. Omni edits the uploaded clip directly; Veo uses three extracted scene
+reference frames. Keep all Gemini and ElevenLabs credentials backend-only.
 
 ## Deploy the frontend to Vercel
 

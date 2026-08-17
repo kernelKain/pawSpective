@@ -51,7 +51,20 @@ def configure_pipeline(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         pipeline_module,
-        "render_story_reel",
+        "prepare_animation_source",
+        lambda source, destination, *args, **kwargs: copyfile(source, destination),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "generate_animated_video",
+        lambda source, destination, *args, **kwargs: (
+            destination.write_bytes(b"generated-animation")
+            and ("gemini_omni", "gemini-omni-flash-preview")
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "render_animated_story_reel",
         fake_render,
     )
 
@@ -81,7 +94,9 @@ def test_pipeline_renders_downloadable_mp4(
     assert result.variation_id == "original"
     assert result.animation_seed == 0
     assert result.music_track_id == "sunny-paws"
-    assert progress == [10, 30, 50, 65, 95]
+    assert result.visual_source == "gemini_omni"
+    assert result.visual_model == "gemini-omni-flash-preview"
+    assert progress == [10, 25, 38, 48, 80, 95]
 
 
 def test_matching_controlled_request_bypasses_voice_and_rendering(
@@ -211,10 +226,6 @@ def test_pipeline_rejects_event_after_video(
             "synthesize_narration",
             VoiceGenerationError("ElevenLabs timed out"),
         ),
-        (
-            "render_story_reel",
-            StoryRenderError("FFmpeg failed"),
-        ),
     ],
 )
 def test_pipeline_preserves_dependency_failures(
@@ -255,7 +266,7 @@ def test_pipeline_requires_rendered_output(
     configure_pipeline(monkeypatch)
     monkeypatch.setattr(
         pipeline_module,
-        "render_story_reel",
+        "render_animated_story_reel",
         skip_output,
     )
     source_path = tmp_path / "source.mp4"
@@ -265,6 +276,74 @@ def test_pipeline_requires_rendered_output(
         StoryRenderError,
         match="output was not created",
     ):
+        run_story_pipeline(
+            source_path,
+            story_request(),
+            tmp_path,
+            lambda _: None,
+        )
+
+
+@pytest.mark.parametrize(
+    "failed_dependency",
+    ["prepare_animation_source", "generate_animated_video", "render_animated_story_reel"],
+)
+def test_pipeline_uses_local_animation_when_provider_path_fails(
+    tmp_path,
+    monkeypatch,
+    failed_dependency: str,
+) -> None:
+    configure_pipeline(monkeypatch)
+    source_path = tmp_path / "source.mp4"
+    source_path.write_bytes(b"video")
+
+    def fail(*args, **kwargs):
+        if failed_dependency == "render_animated_story_reel":
+            raise StoryRenderError("generated render failed")
+        raise pipeline_module.AnimationGenerationError("provider unavailable")
+
+    def local_render(*args, check_cancelled) -> None:
+        check_cancelled()
+        args[4].write_bytes(b"local-fallback")
+
+    monkeypatch.setattr(pipeline_module, failed_dependency, fail)
+    monkeypatch.setattr(pipeline_module, "render_story_reel", local_render)
+
+    result = run_story_pipeline(
+        source_path,
+        story_request(),
+        tmp_path,
+        lambda _: None,
+    )
+
+    assert result.output_path.read_bytes() == b"local-fallback"
+    assert result.visual_source == "local_animation_fallback"
+    assert result.visual_model is None
+
+
+def test_pipeline_reports_local_renderer_failure_after_provider_failure(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    configure_pipeline(monkeypatch)
+    source_path = tmp_path / "source.mp4"
+    source_path.write_bytes(b"video")
+    monkeypatch.setattr(
+        pipeline_module,
+        "generate_animated_video",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            pipeline_module.AnimationGenerationError("quota exhausted")
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "render_story_reel",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            StoryRenderError("FFmpeg failed")
+        ),
+    )
+
+    with pytest.raises(StoryRenderError, match="FFmpeg failed"):
         run_story_pipeline(
             source_path,
             story_request(),

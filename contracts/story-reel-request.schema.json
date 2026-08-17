@@ -333,6 +333,21 @@
       "title": "Animation Seed",
       "type": "integer"
     },
+    "animation_provider": {
+      "default": "gemini_omni",
+      "enum": [
+        "gemini_omni",
+        "veo_3_1"
+      ],
+      "title": "Animation Provider",
+      "type": "string"
+    },
+    "reel_mode": {
+      "const": "animated_dog_pov",
+      "default": "animated_dog_pov",
+      "title": "Reel Mode",
+      "type": "string"
+    },
     "profile": {
       "$ref": "#/$defs/StoryProfile"
     },

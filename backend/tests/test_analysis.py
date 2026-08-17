@@ -24,6 +24,8 @@ def configure(
     api_key: str = "test-key",
     demo_mode: bool = False,
     allow_fallback: bool = True,
+    analysis_fallback_model: str = "",
+    gemini_model: str = "gemini-test-primary",
 ) -> None:
     monkeypatch.setattr(
         analysis_module,
@@ -33,6 +35,8 @@ def configure(
             gemini_api_key=api_key,
             demo_mode=demo_mode,
             allow_demo_fallback=allow_fallback,
+            gemini_analysis_fallback_model=analysis_fallback_model,
+            gemini_model=gemini_model,
         ),
     )
 
@@ -119,6 +123,46 @@ def test_valid_gemini_response_is_validated_and_client_is_closed(
     assert calls[0]["store"] is False
     assert calls[0]["response_format"]["mime_type"] == "application/json"
     assert client.closed
+
+
+def test_quota_failure_uses_configured_analysis_model_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure(
+        monkeypatch,
+        analysis_fallback_model="gemini-3.1-flash-lite",
+    )
+    payload = json.loads(EXAMPLE_PATH.read_text(encoding="utf-8"))
+    calls: list[str] = []
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.interactions = SimpleNamespace(create=self.create)
+
+        def create(self, **kwargs):
+            calls.append(kwargs["model"])
+            if len(calls) == 1:
+                raise RuntimeError("Error code: 429 - quota exceeded")
+            return SimpleNamespace(output_text=json.dumps(payload))
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(
+        analysis_module.genai,
+        "Client",
+        lambda **kwargs: FakeClient(),
+    )
+
+    result, source = analyze_video(write_video(tmp_path), 8_000)
+
+    assert source == "gemini"
+    assert calls == [
+        analysis_module.settings.gemini_model,
+        "gemini-3.1-flash-lite",
+    ]
+    assert any("fallback model" in warning for warning in result.warnings)
 
 
 def test_invalid_gemini_response_uses_fallback_and_closes_client(

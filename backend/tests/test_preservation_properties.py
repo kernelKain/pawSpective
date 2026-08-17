@@ -332,7 +332,7 @@ def test_property_grounded_story_disclosures_remain_semantically_stable(
 
     assert source == "template"
     assert story.featured_event_id == request.featured_event_id
-    assert 40 <= len(story.narration_text.split()) <= 60
+    assert 16 <= len(story.narration_text.split()) <= 28
     assert story.voice_notice == (
         "Fictional dog voice based only on visible scene events."
     )

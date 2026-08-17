@@ -183,6 +183,8 @@ def test_failed_job_response(job_api) -> None:
         "error": "Rendering failed safely.",
         "story_source": None,
         "artifact_source": None,
+        "visual_source": None,
+        "visual_model": None,
         "voice_source": None,
         "variation_id": None,
         "animation_seed": None,

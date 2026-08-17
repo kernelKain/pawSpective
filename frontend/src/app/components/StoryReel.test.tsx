@@ -27,6 +27,8 @@ describe("StoryReel", () => {
         progress={0}
         error={null}
         disabled={false}
+        animationProvider="gemini_omni"
+        onAnimationProviderChange={vi.fn()}
         onRender={onRender}
       />,
     );
@@ -46,6 +48,8 @@ describe("StoryReel", () => {
         progress={65}
         error={null}
         disabled={false}
+        animationProvider="gemini_omni"
+        onAnimationProviderChange={vi.fn()}
         onRender={vi.fn()}
       />,
     );
@@ -53,7 +57,7 @@ describe("StoryReel", () => {
     expect(
       screen.getByRole("progressbar", { name: "Story Reel progress" }).getAttribute("aria-valuenow"),
     ).toBe("65");
-    expect(screen.getByText("Drawing frames and mixing quiet music…")).toBeDefined();
+    expect(screen.getByText("Generating the animated dog-POV scene…")).toBeDefined();
     expect(
       (screen.getByRole("button", { name: "Creating animated reel…" }) as HTMLButtonElement).disabled,
     ).toBe(true);
@@ -69,6 +73,8 @@ describe("StoryReel", () => {
       variationId: "variation-123456",
       animationSeed: 42,
       musicTrackId: "sunny-paws" as const,
+      visualSource: "gemini_omni" as const,
+      visualModel: "gemini-omni-flash-preview",
     };
     const rendered = render(
       <StoryReel
@@ -78,6 +84,8 @@ describe("StoryReel", () => {
         progress={100}
         error={null}
         disabled={false}
+        animationProvider="gemini_omni"
+        onAnimationProviderChange={vi.fn()}
         onRender={onRender}
       />,
     );
@@ -106,11 +114,15 @@ describe("StoryReel", () => {
           variationId: "original",
           animationSeed: 0,
           musicTrackId: "sunny-paws",
+          visualSource: "controlled_demo_cache",
+          visualModel: null,
         }}
         isRendering={false}
         progress={100}
         error={null}
         disabled={false}
+        animationProvider="gemini_omni"
+        onAnimationProviderChange={vi.fn()}
         onRender={vi.fn()}
       />,
     );
@@ -124,6 +136,8 @@ describe("StoryReel", () => {
         progress={0}
         error="The fictional voice is temporarily unavailable."
         disabled={false}
+        animationProvider="gemini_omni"
+        onAnimationProviderChange={vi.fn()}
         onRender={vi.fn()}
       />,
     );

@@ -123,6 +123,11 @@ story_job_limiter = SlidingWindowRateLimiter(
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    logger.info(
+        "Configured CORS origins: %s",
+        ", ".join(settings.cors_origins),
+    )
+
     settings.media_directory.mkdir(
         parents=True,
         exist_ok=True,
@@ -828,6 +833,7 @@ async def create_story_job(
         ),
         variation_id=story_request.variation_id,
         animation_seed=story_request.animation_seed,
+        animation_provider=story_request.animation_provider,
         music_track_id=music_track_id(story_request.animation_seed),
     )
 
@@ -876,6 +882,8 @@ def get_story_job(
         error=record.error,
         story_source=record.story_source,
         artifact_source=record.artifact_source,
+        visual_source=record.visual_source,
+        visual_model=record.visual_model,
         voice_source=record.voice_source,
         variation_id=record.variation_id,
         animation_seed=record.animation_seed,
@@ -953,6 +961,12 @@ def download_story_job(
             ),
             "X-PawSpective-Artifact-Source": (
                 record.artifact_source or "unknown"
+            ),
+            "X-PawSpective-Visual-Source": (
+                record.visual_source or "unknown"
+            ),
+            "X-PawSpective-Visual-Model": (
+                record.visual_model or "none"
             ),
             "X-PawSpective-Voice-Source": (
                 record.voice_source or "unknown"

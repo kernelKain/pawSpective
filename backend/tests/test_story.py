@@ -116,7 +116,7 @@ def test_fallback_story_is_grounded_and_correct_length() -> None:
     validate_story_grounding(story, request)
 
     assert story.featured_event_id == "ball"
-    assert 40 <= len(story.narration_text.split()) <= 60
+    assert 16 <= len(story.narration_text.split()) <= 28
     assert "blue ball" in story.narration_text
     assert "tree" in story.narration_text
     assert "tail" not in story.narration_text.casefold()
@@ -188,7 +188,7 @@ def test_changed_featured_event_is_rejected() -> None:
         validate_story_grounding(story, request)
 
 
-@pytest.mark.parametrize("word_count", [39, 61])
+@pytest.mark.parametrize("word_count", [15, 61])
 def test_story_contract_rejects_invalid_word_count(
     word_count: int,
 ) -> None:
@@ -207,7 +207,7 @@ def test_story_contract_rejects_invalid_word_count(
 
     with pytest.raises(
         ValidationError,
-        match="40 to 60 words",
+        match="16 to 60 words",
     ):
         StoryScriptResponse.model_validate(payload)
 
@@ -323,7 +323,7 @@ def test_fallback_story_is_first_person_fictional_dog_pov() -> None:
     story = fallback_story(story_request())
 
     assert any(word in story.narration_text.lower().split() for word in {"i", "i'm", "my"})
-    assert "fiction" in story.narration_text.lower()
+    assert "fictional" in story.voice_notice.lower()
 
 
 def test_animation_seed_changes_grounded_fallback_wording() -> None:

@@ -101,12 +101,20 @@ export type StoryProfileInput = {
 export type StoryReelSource = "gemini" | "template" | "demo_cache";
 export type StoryArtifactSource = "live_render" | "controlled_demo_cache";
 export type StoryVoiceSource = "elevenlabs" | "controlled_demo_cache";
+export type AnimationProvider = "gemini_omni" | "veo_3_1";
+export type StoryVisualSource =
+  | "gemini_omni"
+  | "veo_3_1"
+  | "local_animation_fallback"
+  | "controlled_demo_cache";
 export type MusicTrackId = "sunny-paws" | "curious-steps" | "cozy-walk";
 export type StoryVariation = { variationId: string; animationSeed: number };
 export type StoryReelResult = {
   video: Blob;
   source: StoryReelSource;
   artifactSource: StoryArtifactSource;
+  visualSource: StoryVisualSource;
+  visualModel: string | null;
   voiceSource: StoryVoiceSource;
   variationId: string;
   animationSeed: number;
@@ -119,6 +127,7 @@ export type StoryJobCreateResponse = {
   status_url: string;
   variation_id: string;
   animation_seed: number;
+  animation_provider: AnimationProvider;
   music_track_id: MusicTrackId;
 };
 
@@ -129,6 +138,8 @@ export type StoryJobStatusResponse = {
   error: string | null;
   story_source: StoryReelSource | null;
   artifact_source: StoryArtifactSource | null;
+  visual_source: StoryVisualSource | null;
+  visual_model: string | null;
   voice_source: StoryVoiceSource | null;
   variation_id: string | null;
   animation_seed: number | null;

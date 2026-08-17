@@ -18,6 +18,7 @@ import {
 } from "./lib/sceneAnalysisApi";
 import type {
   AnalysisSource,
+  AnimationProvider,
   CapturedClip,
   ColorSimulationResponse,
   SceneEvent,
@@ -229,6 +230,8 @@ export function PawSpectiveShell({
   ] = useState(false);
   const [storyProgress, setStoryProgress] =
     useState(0);
+  const [animationProvider, setAnimationProvider] =
+    useState<AnimationProvider>("gemini_omni");
 
   const storyRequestIdRef = useRef(0);
   const storyAbortControllerRef =
@@ -718,6 +721,7 @@ export function PawSpectiveShell({
             lastAnimationSeedRef.current = animationSeed;
             return { variationId, animationSeed };
           })(),
+          animationProvider,
         );
 
       if (
@@ -1497,10 +1501,9 @@ export function PawSpectiveShell({
 
           {analysisSource === "demo" && (
             <div className="mock-notice">
-              Gemini was unavailable or
-              demo mode is enabled. The
-              validated cached response is
-              being shown.
+              Live scene analysis could not complete. Validated cached
+              detections are shown below; check the detailed warning before
+              continuing.
             </div>
           )}
 
@@ -1876,6 +1879,11 @@ export function PawSpectiveShell({
                       ? "Wait for the current calculation to finish."
                       : undefined
                 }
+                animationProvider={animationProvider}
+                onAnimationProviderChange={(provider) => {
+                  invalidateStoryReel();
+                  setAnimationProvider(provider);
+                }}
                 onRender={() =>
                   void createStoryReel()
                 }

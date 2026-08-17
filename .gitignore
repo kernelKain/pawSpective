@@ -3,6 +3,8 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .coverage
 htmlcov/
 
@@ -28,7 +30,9 @@ frontend/*.tsbuildinfo
 # Local tooling
 .DS_Store
 Thumbs.db
+*.log
 .kiro/
 semantic-review/
+artifacts/
 frontend/playwright-report/
 frontend/test-results/

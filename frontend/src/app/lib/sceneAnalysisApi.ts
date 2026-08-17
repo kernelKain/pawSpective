@@ -9,6 +9,7 @@ import type {
   StoryJobCreateResponse,
   StoryJobStatusResponse,
   StoryProfileInput,
+  AnimationProvider,
   StoryReelResult,
   StoryVariation,
   VisibilityAnalysisResponse,
@@ -23,6 +24,30 @@ const API_BASE_URL =
 
 const unsafeErrorPattern =
   /(?:[a-z]:\\|\/(?:users|home|tmp)\/|api[_-]?key|secret|traceback|stack trace)/i;
+
+const backendConnectionErrorMessage =
+  "PawSpective could not reach the analysis service. Check the deployed API URL and allowed frontend origin, then try again.";
+
+async function fetchApi(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
+  try {
+    return await fetch(input, init);
+  } catch (error) {
+    if (
+      error instanceof DOMException &&
+      error.name === "AbortError"
+    ) {
+      throw error;
+    }
+
+    throw new Error(
+      backendConnectionErrorMessage,
+      { cause: error },
+    );
+  }
+}
 
 async function readApiError(
   response: Response,
@@ -103,7 +128,7 @@ export async function analyzeCapturedClip(
     clip.file.name,
   );
 
-  const response = await fetch(
+  const response = await fetchApi(
     `${API_BASE_URL}/api/v1/analyze-video`,
     {
       method: "POST",
@@ -124,7 +149,7 @@ export async function analyzeCapturedClip(
 }
 
 export async function loadControlledDemo(): Promise<ControlledDemoBundle> {
-  const statusResponse = await fetch(
+  const statusResponse = await fetchApi(
     `${API_BASE_URL}/api/v1/demo/status`,
     { method: "GET", cache: "no-store" },
   );
@@ -149,7 +174,7 @@ export async function loadControlledDemo(): Promise<ControlledDemoBundle> {
     );
   }
 
-  const clipResponse = await fetch(`${API_BASE_URL}${status.clip_url}`);
+  const clipResponse = await fetchApi(`${API_BASE_URL}${status.clip_url}`);
 
   if (!clipResponse.ok) {
     throw await readApiError(
@@ -199,7 +224,7 @@ export async function scoreCapturedClip(
     }),
   );
 
-  const response = await fetch(
+  const response = await fetchApi(
     `${API_BASE_URL}/api/v1/score-visibility`,
     {
       method: "POST",
@@ -243,7 +268,7 @@ export async function simulateCapturedObjectColors(
     }),
   );
 
-  const response = await fetch(
+  const response = await fetchApi(
     `${API_BASE_URL}/api/v1/simulate-object-colors`,
     {
       method: "POST",
@@ -275,6 +300,7 @@ export async function renderCapturedStoryReel(
     variationId: "original",
     animationSeed: 0,
   },
+  animationProvider: AnimationProvider = "gemini_omni",
 ): Promise<StoryReelResult> {
   const formData = new FormData();
 
@@ -294,6 +320,8 @@ export async function renderCapturedStoryReel(
       style: "nature_documentary",
       variation_id: variation.variationId,
       animation_seed: variation.animationSeed,
+      animation_provider: animationProvider,
+      reel_mode: "animated_dog_pov",
       profile,
       events,
       scores,
@@ -303,7 +331,7 @@ export async function renderCapturedStoryReel(
 
   onProgress?.(0);
 
-  const createResponse = await fetch(
+  const createResponse = await fetchApi(
     `${API_BASE_URL}/api/v1/story-jobs`,
     {
       method: "POST",
@@ -329,7 +357,7 @@ export async function renderCapturedStoryReel(
   const cancelJob = () => {
     if (cancellationSent) return;
     cancellationSent = true;
-    void fetch(`${API_BASE_URL}${created.status_url}`, {
+    void fetchApi(`${API_BASE_URL}${created.status_url}`, {
       method: "DELETE",
       cache: "no-store",
       keepalive: true,
@@ -349,7 +377,7 @@ export async function renderCapturedStoryReel(
     while (true) {
       await wait(1_500, signal);
 
-      const statusResponse = await fetch(
+      const statusResponse = await fetchApi(
         `${API_BASE_URL}${created.status_url}`,
         {
           method: "GET",
@@ -397,6 +425,7 @@ export async function renderCapturedStoryReel(
       if (
         !status.story_source ||
         !status.artifact_source ||
+        !status.visual_source ||
         !status.voice_source ||
         !status.variation_id ||
         status.animation_seed === null ||
@@ -407,7 +436,7 @@ export async function renderCapturedStoryReel(
         );
       }
 
-      const downloadResponse = await fetch(
+      const downloadResponse = await fetchApi(
         `${API_BASE_URL}${status.download_url}`,
         {
           method: "GET",
@@ -431,6 +460,8 @@ export async function renderCapturedStoryReel(
         video,
         source: status.story_source,
         artifactSource: status.artifact_source,
+        visualSource: status.visual_source,
+        visualModel: status.visual_model,
         voiceSource: status.voice_source,
         variationId: status.variation_id,
         animationSeed: status.animation_seed,

@@ -14,6 +14,7 @@ import type {
   VisibilityScore,
 } from "../types/sceneAnalysis";
 import {
+  analyzeCapturedClip,
   loadControlledDemo,
   renderCapturedStoryReel,
   simulateCapturedObjectColors,
@@ -110,6 +111,16 @@ afterEach(() => {
 });
 
 describe("sceneAnalysisApi", () => {
+  it("explains backend connectivity failures during scene analysis", async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+    await expect(
+      analyzeCapturedClip(clip),
+    ).rejects.toThrow(
+      "PawSpective could not reach the analysis service. Check the deployed API URL and allowed frontend origin, then try again.",
+    );
+  });
+
   it("loads the verified controlled demo bundle", async () => {
     fetchMock
       .mockResolvedValueOnce(
@@ -237,6 +248,8 @@ describe("sceneAnalysisApi", () => {
             variation_id: "original",
             animation_seed: 0,
             music_track_id: "sunny-paws",
+            visual_source: "gemini_omni",
+            visual_model: "gemini-omni-flash-preview",
           }),
         )
         .mockResolvedValueOnce(
@@ -439,6 +452,8 @@ describe("sceneAnalysisApi", () => {
             variation_id: "original",
             animation_seed: 0,
             music_track_id: "sunny-paws",
+            visual_source: "local_animation_fallback",
+            visual_model: null,
           }),
         )
         .mockResolvedValueOnce(

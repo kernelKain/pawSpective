@@ -59,6 +59,8 @@ def test_manager_runs_job_to_completion(
             variation_id=request.variation_id,
             animation_seed=request.animation_seed,
             music_track_id="sunny-paws",
+            visual_source="gemini_omni",
+            visual_model="gemini-omni-flash-preview",
         )
 
     monkeypatch.setattr(
@@ -80,6 +82,8 @@ def test_manager_runs_job_to_completion(
     record = store.get(job_id)
 
     assert record.status == "completed"
+    assert record.visual_source == "gemini_omni"
+    assert record.visual_model == "gemini-omni-flash-preview"
     assert record.progress == 100
     assert record.story_source == "template"
     assert record.artifact_source == "live_render"

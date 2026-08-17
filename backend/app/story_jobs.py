@@ -108,6 +108,8 @@ class StoryJobManager:
                     job_id,
                     result.story_source,
                     artifact_source=result.artifact_source,
+                    visual_source=result.visual_source,
+                    visual_model=result.visual_model,
                     voice_source=result.voice_source,
                     variation_id=result.variation_id,
                     animation_seed=result.animation_seed,

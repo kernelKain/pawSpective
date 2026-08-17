@@ -92,6 +92,20 @@
       "const": "Fictional dog voice based only on visible scene events.",
       "title": "Voice Notice",
       "type": "string"
+    },
+    "animation_prompt": {
+      "anyOf": [
+        {
+          "maxLength": 2400,
+          "minLength": 40,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Animation Prompt"
     }
   },
   "required": [

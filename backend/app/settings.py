@@ -24,9 +24,9 @@ def env_origins() -> tuple[str, ...]:
     )
 
     return tuple(
-        origin.strip()
+        origin.strip().rstrip("/")
         for origin in value.split(",")
-        if origin.strip()
+        if origin.strip().rstrip("/")
     )
 
 
@@ -34,6 +34,7 @@ def env_origins() -> tuple[str, ...]:
 class Settings:
     gemini_api_key: str
     gemini_model: str
+    gemini_analysis_fallback_model: str
     demo_mode: bool
     allow_demo_fallback: bool
     controlled_demo_enabled: bool
@@ -52,6 +53,11 @@ class Settings:
     job_ttl_seconds: int
     max_concurrent_story_jobs: int
     story_jobs_per_hour: int
+    animation_enabled: bool
+    omni_video_model: str
+    veo_video_model: str
+    animation_timeout_seconds: int
+    allow_local_animation_fallback: bool
 
 
 settings = Settings(
@@ -60,6 +66,10 @@ settings = Settings(
         "GEMINI_MODEL",
         "gemini-3.6-flash",
     ),
+    gemini_analysis_fallback_model=os.getenv(
+        "GEMINI_ANALYSIS_FALLBACK_MODEL",
+        "gemini-3.1-flash-lite",
+    ).strip(),
     demo_mode=env_bool("PAWSPECTIVE_DEMO_MODE", True),
     allow_demo_fallback=env_bool(
         "PAWSPECTIVE_ALLOW_DEMO_FALLBACK",
@@ -140,6 +150,26 @@ settings = Settings(
                 "5",
             ),
         ),
+    ),
+    animation_enabled=env_bool(
+        "PAWSPECTIVE_ANIMATION_ENABLED",
+        True,
+    ),
+    omni_video_model=os.getenv(
+        "PAWSPECTIVE_OMNI_VIDEO_MODEL",
+        "gemini-omni-flash-preview",
+    ),
+    veo_video_model=os.getenv(
+        "PAWSPECTIVE_VEO_VIDEO_MODEL",
+        "veo-3.1-fast-generate-preview",
+    ),
+    animation_timeout_seconds=max(
+        60,
+        int(os.getenv("PAWSPECTIVE_ANIMATION_TIMEOUT_SECONDS", "420")),
+    ),
+    allow_local_animation_fallback=env_bool(
+        "PAWSPECTIVE_ALLOW_LOCAL_ANIMATION_FALLBACK",
+        True,
     ),
     cors_origins=env_origins(),
 )

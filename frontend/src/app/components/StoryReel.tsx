@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo } from "react";
 
-import type { StoryReelResult } from "../types/sceneAnalysis";
+import type { AnimationProvider, StoryReelResult } from "../types/sceneAnalysis";
 
 type StoryReelProps = {
   dogName: string;
@@ -12,14 +12,17 @@ type StoryReelProps = {
   error: string | null;
   disabled: boolean;
   disabledReason?: string;
+  animationProvider: AnimationProvider;
+  onAnimationProviderChange: (provider: AnimationProvider) => void;
   onRender: () => void;
 };
 
 function progressMessage(progress: number) {
   if (progress < 20) return "Checking the clip and scene…";
-  if (progress < 45) return "Writing a grounded dog-POV story…";
-  if (progress < 65) return "Creating the fictional narration…";
-  if (progress < 90) return "Drawing frames and mixing quiet music…";
+  if (progress < 40) return "Writing a cheerful fictional dog monologue…";
+  if (progress < 50) return "Creating the monologue voice…";
+  if (progress < 80) return "Generating the animated dog-POV scene…";
+  if (progress < 95) return "Adding captions and quiet music…";
   return "Finishing your reel…";
 }
 
@@ -37,6 +40,8 @@ export function StoryReel({
   error,
   disabled,
   disabledReason,
+  animationProvider,
+  onAnimationProviderChange,
   onRender,
 }: StoryReelProps) {
   const videoUrl = useMemo(
@@ -62,9 +67,29 @@ export function StoryReel({
       {!result && (
         <div className="story-reel-empty">
           <p>
-            Transform the original action into a warm, text-free animated sketch
-            with first-person narration and quiet instrumental music.
+            Transform the reviewed scene into an aesthetic first-person dog-POV
+            animation with a cheerful fictional internal monologue.
           </p>
+          <div className="animation-provider" aria-label="Animation provider">
+            <button
+              className={animationProvider === "gemini_omni" ? "selected" : ""}
+              type="button"
+              disabled={isRendering}
+              aria-pressed={animationProvider === "gemini_omni"}
+              onClick={() => onAnimationProviderChange("gemini_omni")}
+            >
+              Omni Flash
+            </button>
+            <button
+              className={animationProvider === "veo_3_1" ? "selected" : ""}
+              type="button"
+              disabled={isRendering}
+              aria-pressed={animationProvider === "veo_3_1"}
+              onClick={() => onAnimationProviderChange("veo_3_1")}
+            >
+              Veo 3.1
+            </button>
+          </div>
           <button
             className="primary-button"
             type="button"
@@ -121,6 +146,13 @@ export function StoryReel({
               {result.voiceSource === "controlled_demo_cache"
                 ? " · Saved demo narration"
                 : " · ElevenLabs narration"}
+              {result.visualSource === "gemini_omni"
+                ? " · Omni animation"
+                : result.visualSource === "veo_3_1"
+                  ? " · Veo animation"
+                  : result.visualSource === "local_animation_fallback"
+                    ? " · Local animated fallback"
+                    : " · Saved demo visuals"}
             </p>
             <a
               className="primary-button download-button"
@@ -149,8 +181,8 @@ export function StoryReel({
       )}
 
       <p className="context-note">
-        The sketch preserves recorded scene evidence and uses a canine-color
-        approximation. It does not reconstruct exactly what a dog sees.
+        AI-generated dog-POV interpretation with a fictional internal monologue.
+        It does not reconstruct exact canine sight or actual dog thoughts.
       </p>
     </div>
   );

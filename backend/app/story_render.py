@@ -15,7 +15,7 @@ from backend.app.visibility import canine_approximation
 
 WIDTH = 720
 HEIGHT = 1280
-FPS = 15
+FPS = 24
 NARRATION_TARGET_LUFS = -16
 MUSIC_TARGET_LUFS = -30
 MUSIC_TRACKS = (
@@ -141,6 +141,154 @@ def _music_source(seed: int, duration: int) -> str:
     return f"aevalsrc={tones}:s=44100:d={duration}"
 
 
+def _wrapped_caption(text: str, maximum: int = 34) -> list[str]:
+    words = text.split()
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        candidate = f"{current} {word}".strip()
+        if current and len(candidate) > maximum:
+            lines.append(current)
+            current = word
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    return lines[:2]
+
+
+def _draw_monologue_overlay(
+    frame: np.ndarray,
+    caption: str,
+) -> np.ndarray:
+    overlay = frame.copy()
+    cv2.rectangle(overlay, (0, HEIGHT - 250), (WIDTH, HEIGHT), (18, 24, 29), -1)
+    frame = cv2.addWeighted(overlay, 0.68, frame, 0.32, 0)
+    lines = _wrapped_caption(caption)
+    first_y = HEIGHT - 170 - max(0, len(lines) - 1) * 28
+    for offset, line in enumerate(lines):
+        size = cv2.getTextSize(line, cv2.FONT_HERSHEY_DUPLEX, 0.82, 2)[0]
+        x = max(28, (WIDTH - size[0]) // 2)
+        y = first_y + offset * 58
+        cv2.putText(
+            frame,
+            line,
+            (x, y),
+            cv2.FONT_HERSHEY_DUPLEX,
+            0.82,
+            (255, 255, 255),
+            2,
+            cv2.LINE_AA,
+        )
+    footer = "Fictional AI dog monologue"
+    size = cv2.getTextSize(footer, cv2.FONT_HERSHEY_SIMPLEX, 0.43, 1)[0]
+    cv2.putText(
+        frame,
+        footer,
+        ((WIDTH - size[0]) // 2, HEIGHT - 28),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.43,
+        (210, 220, 225),
+        1,
+        cv2.LINE_AA,
+    )
+    return frame
+
+
+def render_animated_story_reel(
+    animation_path: Path,
+    narration_path: Path,
+    request: StoryReelRequest,
+    story: StoryScriptResponse,
+    destination: Path,
+    check_cancelled: Callable[[], None] = lambda: None,
+) -> None:
+    """Compose one generated animation with the complete fictional monologue."""
+    check_cancelled()
+    if shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None:
+        raise StoryRenderError("FFmpeg or FFprobe is unavailable on the backend.")
+
+    animation_duration_ms = probe_duration_ms(animation_path)
+    audio_duration_ms = probe_duration_ms(narration_path)
+    if not 5_000 <= animation_duration_ms <= 11_000:
+        raise StoryRenderError("The generated animation has an invalid duration.")
+    if audio_duration_ms > animation_duration_ms + 250:
+        raise StoryRenderError("The monologue is too long for the generated animation.")
+
+    capture = cv2.VideoCapture(str(animation_path))
+    if not capture.isOpened():
+        raise StoryRenderError("The generated animation could not be opened.")
+    source_fps = capture.get(cv2.CAP_PROP_FPS) or FPS
+    source_frames = max(1, round(capture.get(cv2.CAP_PROP_FRAME_COUNT)))
+    silent_path = destination.with_name("animated-captioned.mp4")
+    writer = cv2.VideoWriter(
+        str(silent_path), cv2.VideoWriter_fourcc(*"mp4v"), FPS, (WIDTH, HEIGHT)
+    )
+    if not writer.isOpened():
+        capture.release()
+        raise StoryRenderError("The animated reel could not be created.")
+
+    output_frames = max(1, round(animation_duration_ms / 1000 * FPS))
+    try:
+        for frame_number in range(output_frames):
+            check_cancelled()
+            source_index = min(
+                source_frames - 1,
+                round(frame_number / FPS * source_fps),
+            )
+            capture.set(cv2.CAP_PROP_POS_FRAMES, source_index)
+            ok, frame = capture.read()
+            if not ok or frame is None:
+                raise StoryRenderError("A generated animation frame could not be read.")
+            line_index = min(
+                len(story.lines) - 1,
+                frame_number * len(story.lines) // output_frames,
+            )
+            writer.write(
+                _draw_monologue_overlay(
+                    vertical_canvas(frame),
+                    story.lines[line_index].text,
+                )
+            )
+    finally:
+        capture.release()
+        writer.release()
+
+    reel_seconds = animation_duration_ms / 1000
+    fade_out_start = max(0.0, reel_seconds - 1.0)
+    filter_graph = (
+        f"[1:a]loudnorm=I={NARRATION_TARGET_LUFS}:LRA=9:TP=-1.5,"
+        f"apad=whole_dur={reel_seconds:.3f}[voice];"
+        f"[2:a]loudnorm=I={MUSIC_TARGET_LUFS}:LRA=7:TP=-3,volume=0.16,"
+        f"afade=t=in:st=0:d=0.6,afade=t=out:st={fade_out_start:.3f}:d=1[music];"
+        "[voice][music]amix=inputs=2:duration=first:dropout_transition=1:normalize=0,"
+        "alimiter=limit=0.95[audio]"
+    )
+    command = [
+        "ffmpeg", "-y", "-loglevel", "error",
+        "-i", str(silent_path),
+        "-i", str(narration_path),
+        "-f", "lavfi", "-i", _music_source(request.animation_seed, math.ceil(reel_seconds)),
+        "-filter_complex", filter_graph,
+        "-map", "0:v:0", "-map", "[audio]",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+        "-pix_fmt", "yuv420p", "-r", str(FPS),
+        "-c:a", "aac", "-b:a", "160k",
+        "-t", f"{reel_seconds:.3f}", "-movflags", "+faststart",
+        str(destination),
+    ]
+    try:
+        subprocess.run(command, check=True, capture_output=True, timeout=120)
+        check_cancelled()
+    except Exception as error:
+        destination.unlink(missing_ok=True)
+        raise StoryRenderError("The animated Story Reel could not be completed.") from error
+    finally:
+        silent_path.unlink(missing_ok=True)
+    if not destination.is_file() or destination.stat().st_size == 0:
+        raise StoryRenderError("The animated Story Reel output was not created.")
+
+
 def render_story_reel(
     video_path: Path,
     narration_path: Path,
@@ -158,10 +306,12 @@ def render_story_reel(
         raise StoryRenderError("FFmpeg or FFprobe is unavailable on the backend.")
 
     audio_duration_ms = probe_duration_ms(narration_path)
-    if audio_duration_ms > 23_000:
+    if audio_duration_ms > 18_000:
         raise StoryRenderError("The narration is too long for this reel.")
 
-    reel_seconds = min(25, max(15, math.ceil(audio_duration_ms / 1000) + 2))
+    voice_speed = max(1.0, audio_duration_ms / 9_000)
+    fitted_audio_ms = audio_duration_ms / voice_speed
+    reel_seconds = min(10, max(8, math.ceil(fitted_audio_ms / 1000) + 1))
     capture = cv2.VideoCapture(str(video_path))
     if not capture.isOpened():
         raise StoryRenderError("The prepared video could not be opened.")
@@ -207,7 +357,8 @@ def render_story_reel(
 
     fade_out_start = max(0.0, reel_seconds - 1.5)
     filter_graph = (
-        f"[1:a]loudnorm=I={NARRATION_TARGET_LUFS}:LRA=9:TP=-1.5,"
+        f"[1:a]atempo={voice_speed:.4f},"
+        f"loudnorm=I={NARRATION_TARGET_LUFS}:LRA=9:TP=-1.5,"
         f"apad=whole_dur={reel_seconds}[voice];"
         f"[2:a]loudnorm=I={MUSIC_TARGET_LUFS}:LRA=7:TP=-3,volume=0.18,"
         f"afade=t=in:st=0:d=1.2,afade=t=out:st={fade_out_start}:d=1.5[music];"

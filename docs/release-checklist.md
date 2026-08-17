@@ -18,6 +18,19 @@ python -m pytest backend/tests
 Confirm the backend container builds and `/api/v1/health/ready` returns `200`
 with the intended production environment.
 
+## Public repository checks
+
+- The README architecture diagram matches the deployed services and data flow.
+- The [AI disclosure](AI_DISCLOSURE.md) matches the configured providers,
+  retention settings, and fallback behavior.
+- The [third-party notices](THIRD_PARTY_NOTICES.md) and exact dependency
+  licenses have been reviewed for the release image and lockfiles.
+- No `.env`, API key, generated media, private demo source, local absolute path,
+  stack trace, or test artifact is tracked by Git.
+- Repository-local documentation links pass `scripts/check_markdown_links.py`.
+- Default scaffold assets and obsolete documentation are removed only after
+  confirming that source, Docker, CI, tests, and docs do not reference them.
+
 ## Browser and device checks
 
 - Desktop Chrome, Android Chrome, and iPhone Safari.

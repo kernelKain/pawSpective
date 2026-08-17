@@ -19,7 +19,7 @@ thoughts, emotions, or sense of smell.
 7. PawSpective displays one dog-visible contrast insight.
 8. The owner may compare fixed screen colors for one scored object.
 9. PawSpective displays possible attention cues in a Curiosity Map.
-10. PawSpective generates one narrated vertical Story Reel.
+10. PawSpective generates one animated, narrated vertical dog-height POV Story Reel.
 11. The owner downloads the reel.
 
 ## Information labels
@@ -103,8 +103,9 @@ Do not use:
 - Maximum accepted duration: 15 seconds
 - Target detected events: 3–5
 - Maximum accepted events: 12
-- Story duration: 15–25 seconds
-- Story length: approximately 40–65 words
+- Story duration: 8–10 seconds
+- Live story length: approximately 16–28 words
+- Legacy controlled-demo scripts may contain up to 60 words
 - Video format: 9:16 MP4
 - Story style: nature documentary
 - Dog voice: predefined and cached
@@ -223,3 +224,11 @@ The generated story must:
 - Avoid claims about emotions, thoughts, gaze, smell, or intent
 - Fit the target video duration
 - Identify the voice as fictional
+
+The generated animation must:
+- Use one continuous first-person dog-height artistic viewpoint
+- Preserve corrected visible objects, counts, relationships, and action order
+- Avoid external shots of the dog, invented outcomes, text, logos, and generated audio
+- Use ElevenLabs for the complete fictional internal monologue
+- Carry visual provenance identifying Omni, Veo, local fallback, or saved demo visuals
+- Be described as an artistic canine-vision-inspired approximation, never exact sight

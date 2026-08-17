@@ -138,43 +138,27 @@ def _favorite_is_grounded(request: StoryReelRequest) -> bool:
 
 
 def fallback_story(request: StoryReelRequest) -> StoryScriptResponse:
-    """Create a varied, grounded dog-POV script without a model call."""
+    """Create a short, upbeat internal monologue without a model call."""
     first = request.events[0]
     second = request.events[1] if len(request.events) > 1 else first
     dog_name = request.profile.dog_name
     variation = request.animation_seed % 3
-    profile_words = _profile_description(request)
-    favorite_note = (
-        f" My favorite, {request.profile.favorite_interest}, really is here."
-        if _favorite_is_grounded(request)
-        else ""
-    )
-
+    first_motion = _motion_words(first.motion_level.value)
+    second_motion = _motion_words(second.motion_level.value)
     openings = (
-        f"I'm {dog_name}, {profile_words}. In my playful version, "
-        f"{first.object_label} appears, {_motion_words(first.motion_level.value)}.",
-        f"I'm {dog_name}, {profile_words}, narrating today. "
-        f"{first.object_label} enters my little sketch story, "
-        f"{_motion_words(first.motion_level.value)}.",
-        f"My name is {dog_name}, and I'm {profile_words}. "
-        f"The clip gives my fictional adventure {first.object_label}, "
-        f"{_motion_words(first.motion_level.value)}.",
+        f"I'm {dog_name}; {first.object_label} is {first_motion}. Adventure underway.",
+        f"I'm {dog_name}; {first.object_label} is {first_motion} with excellent timing.",
+        f"My report: {first.object_label} is {first_motion}. Important business.",
     )
     middles = (
-        f"Then {second.object_label} is visible, "
-        f"{_motion_words(second.motion_level.value)} in the recorded moment.",
-        f"Next comes {second.object_label}; I make it sound wonderfully important, "
-        "but the timing and action still come from the real clip.",
-        f"With {second.object_label} also visible, I narrate the moment like a tiny "
-        "adventurer while keeping the scene evidence unchanged.",
+        f"{second.object_label} is {second_motion}, adding tasteful drama.",
+        f"{second.object_label} is {second_motion}; the production improves.",
+        f"{second.object_label} is {second_motion}. Naturally, I approve.",
     )
     endings = (
-        f"My verdict: {first.object_label} makes an excellent sketch-memory. "
-        f"These are only fictional dog words.{favorite_note}",
-        f"I give {first.object_label} top billing in this warm little reel. "
-        f"The voice is playful fiction, not a real report from my mind.{favorite_note}",
-        f"For my finale, {first.object_label} stays the star of the recorded moment. "
-        f"My narration is just for fun.{favorite_note}",
+        f"I award {first.object_label} a cheerful finale.",
+        f"I approve {first.object_label} and this very good afternoon.",
+        f"I declare {first.object_label} a delightful success.",
     )
 
     lines = [
@@ -198,25 +182,10 @@ def fallback_story(request: StoryReelRequest) -> StoryScriptResponse:
         ),
     ]
 
-    # Very long free-text profile values can push the strict voice budget over
-    # its cap. Fall back to bounded descriptors while preserving core profile use.
-    if len(" ".join(line.text for line in lines).split()) > 60:
-        age = request.profile.age.lower()
-        article = "an" if age[0] in "aeiou" else "a"
-        compact = f"{article} {age}, {request.profile.size.lower()} dog"
-        lines[0].text = (
-            f"I'm {dog_name}, {compact}. In my playful version, "
-            f"{first.object_label} appears, {_motion_words(first.motion_level.value)}."
-        )
-        lines[2].text = (
-            f"My finale keeps {first.object_label} in the recorded moment. "
-            "This voice is playful fiction, not a real report from my mind."
-        )
-
     story = StoryScriptResponse(
         story_version="1.0",
         style="nature_documentary",
-        title=f"{dog_name}'s sketch story",
+        title=f"{dog_name}'s little adventure",
         featured_event_id=request.featured_event_id,
         voice_notice="Fictional dog voice based only on visible scene events.",
         lines=lines,
@@ -254,13 +223,11 @@ def _apply_server_grounding(
     generated: StoryScriptResponse,
     request: StoryReelRequest,
 ) -> StoryScriptResponse:
-    """Keep model framing metadata but make every spoken claim server-derived."""
+    """Keep model art direction while deriving every spoken claim on-server."""
     grounded = fallback_story(request)
-    return generated.model_copy(
+    return grounded.model_copy(
         update={
-            "featured_event_id": request.featured_event_id,
-            "voice_notice": grounded.voice_notice,
-            "lines": grounded.lines,
+            "animation_prompt": generated.animation_prompt,
         }
     )
 

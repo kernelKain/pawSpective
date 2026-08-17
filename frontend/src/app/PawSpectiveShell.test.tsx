@@ -276,7 +276,7 @@ describe("PawSpectiveShell release flow", () => {
     await reachResults("demo");
 
     expect(
-      screen.getByText(/validated cached response is being shown/),
+      screen.getByText(/validated cached detections are shown below/i),
     ).toBeDefined();
 
     const scoringButton = screen.getByRole("button", {
@@ -311,6 +311,8 @@ describe("PawSpectiveShell release flow", () => {
       variationId: "original",
       animationSeed: 0,
       musicTrackId: "sunny-paws",
+      visualSource: "gemini_omni",
+      visualModel: "gemini-omni-flash-preview",
     });
     await reachResults();
 
@@ -588,6 +590,8 @@ describe("PawSpectiveShell release flow", () => {
       variationId: "original",
       animationSeed: 0,
       musicTrackId: "sunny-paws",
+      visualSource: "gemini_omni",
+      visualModel: "gemini-omni-flash-preview",
     });
     await reachResults();
 

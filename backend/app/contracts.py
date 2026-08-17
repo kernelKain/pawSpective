@@ -249,6 +249,11 @@ class StoryScriptResponse(StrictModel):
     voice_notice: Literal[
         "Fictional dog voice based only on visible scene events."
     ]
+    animation_prompt: str | None = Field(
+        default=None,
+        min_length=40,
+        max_length=2_400,
+    )
 
     @property
     def narration_text(self) -> str:
@@ -258,9 +263,12 @@ class StoryScriptResponse(StrictModel):
     def validate_story_length(self) -> "StoryScriptResponse":
         word_count = len(self.narration_text.split())
 
-        if word_count < 40 or word_count > 60:
+        # Older controlled-demo bundles contain the original 40-60 word
+        # narration. New generated reels target 16-28 words so an 8-10 second
+        # animation can carry the complete monologue without looping.
+        if word_count < 16 or word_count > 60:
             raise ValueError(
-                "Story narration must contain 40 to 60 words"
+                "Story narration must contain 16 to 60 words"
             )
 
         return self
@@ -276,6 +284,11 @@ class StoryReelRequest(StrictModel):
         pattern=r"^[a-zA-Z0-9_-]+$",
     )
     animation_seed: int = Field(default=0, ge=0, le=2_147_483_647)
+    animation_provider: Literal[
+        "gemini_omni",
+        "veo_3_1",
+    ] = "gemini_omni"
+    reel_mode: Literal["animated_dog_pov"] = "animated_dog_pov"
     profile: StoryProfile
     events: list[SceneEvent] = Field(min_length=1, max_length=12)
     scores: list[VisibilityScore] = Field(min_length=1, max_length=12)
@@ -319,6 +332,10 @@ class StoryJobCreateResponse(StrictModel):
     status_url: str
     variation_id: str
     animation_seed: int
+    animation_provider: Literal[
+        "gemini_omni",
+        "veo_3_1",
+    ]
     music_track_id: Literal[
         "sunny-paws",
         "curious-steps",
@@ -352,6 +369,13 @@ class StoryJobStatusResponse(StrictModel):
         "live_render",
         "controlled_demo_cache",
     ] | None = None
+    visual_source: Literal[
+        "gemini_omni",
+        "veo_3_1",
+        "local_animation_fallback",
+        "controlled_demo_cache",
+    ] | None = None
+    visual_model: str | None = Field(default=None, max_length=120)
     voice_source: Literal[
         "elevenlabs",
         "controlled_demo_cache",

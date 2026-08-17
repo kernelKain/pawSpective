@@ -1793,6 +1793,38 @@ footer p {
   background: rgba(243, 200, 82, 0.08);
 }
 
+.animation-provider {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  width: min(100%, 320px);
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.animation-provider button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.animation-provider button.selected {
+  background: var(--ink);
+  color: #fff;
+}
+
+.animation-provider button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
 .story-reel-video {
   display: block;
   width: min(100%, 360px);

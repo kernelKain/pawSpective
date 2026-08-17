@@ -9,7 +9,13 @@ services:
       PAWSPECTIVE_MEDIA_DIRECTORY: /data/media
       PAWSPECTIVE_JOBS_DIRECTORY: /data/jobs
       PAWSPECTIVE_JOB_DATABASE: /data/jobs.sqlite3
-      PAWSPECTIVE_CORS_ORIGINS: http://localhost:3000
+      PAWSPECTIVE_CORS_ORIGINS: ${PAWSPECTIVE_CORS_ORIGINS:-http://localhost:3000}
+      GEMINI_ANALYSIS_FALLBACK_MODEL: ${GEMINI_ANALYSIS_FALLBACK_MODEL:-gemini-3.1-flash-lite}
+      PAWSPECTIVE_ANIMATION_ENABLED: ${PAWSPECTIVE_ANIMATION_ENABLED:-true}
+      PAWSPECTIVE_OMNI_VIDEO_MODEL: ${PAWSPECTIVE_OMNI_VIDEO_MODEL:-gemini-omni-flash-preview}
+      PAWSPECTIVE_VEO_VIDEO_MODEL: ${PAWSPECTIVE_VEO_VIDEO_MODEL:-veo-3.1-fast-generate-preview}
+      PAWSPECTIVE_ANIMATION_TIMEOUT_SECONDS: ${PAWSPECTIVE_ANIMATION_TIMEOUT_SECONDS:-420}
+      PAWSPECTIVE_ALLOW_LOCAL_ANIMATION_FALLBACK: ${PAWSPECTIVE_ALLOW_LOCAL_ANIMATION_FALLBACK:-true}
     volumes:
       - pawspective-data:/data
     ports:
@@ -21,7 +27,7 @@ services:
       context: frontend
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
     depends_on:
       backend:
         condition: service_healthy

@@ -119,7 +119,7 @@ def test_real_story_reel_is_vertical_h264_aac(
     assert streams["video"]["pix_fmt"] == "yuv420p"
     assert streams["video"]["display_aspect_ratio"] == "9:16"
     assert streams["audio"]["codec_name"] == "aac"
-    assert 15 <= duration <= 25
+    assert 8 <= duration <= 10
 
 
 def test_rejects_narration_over_reel_limit(
@@ -136,7 +136,7 @@ def test_rejects_narration_over_reel_limit(
     monkeypatch.setattr(
         render_module,
         "probe_duration_ms",
-        lambda _: 23_001,
+        lambda _: 18_001,
     )
 
     request = story_request()
@@ -183,14 +183,15 @@ def test_reports_missing_ffmpeg(
         )
 
 
-def test_story_renderer_is_text_free_and_music_stays_below_voice() -> None:
+def test_story_renderer_draws_fictional_captions_and_keeps_music_below_voice() -> None:
     import inspect
     import backend.app.story_render as render_module
 
-    source = inspect.getsource(render_module)
+    overlay_source = inspect.getsource(render_module._draw_monologue_overlay)
+    source = inspect.getsource(render_module.render_animated_story_reel)
 
-    assert "cv2.putText" not in source
-    assert "add_subtitle" not in source
+    assert "cv2.putText" in overlay_source
+    assert "Fictional AI dog monologue" in overlay_source
     assert render_module.MUSIC_TARGET_LUFS < render_module.NARRATION_TARGET_LUFS
     assert "alimiter=limit=0.95" in source
     assert "afade=t=in" in source

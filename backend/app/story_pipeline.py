@@ -3,12 +3,23 @@ from pathlib import Path
 from typing import Callable
 
 from backend.app import demo_cache
+from backend.app.animation import (
+    AnimationGenerationError,
+    build_animation_prompt,
+    generate_animated_video,
+    prepare_animation_source,
+)
 from backend.app.contracts import StoryReelRequest
 from backend.app.demo_cache import DemoCacheError
 from backend.app.media import MediaValidationError, normalize_video, probe_duration_ms
 from backend.app.settings import settings
 from backend.app.story import StoryGenerationError, StorySource, generate_story
-from backend.app.story_render import StoryRenderError, music_track_id, render_story_reel
+from backend.app.story_render import (
+    StoryRenderError,
+    music_track_id,
+    render_animated_story_reel,
+    render_story_reel,
+)
 from backend.app.voice import VoiceGenerationError, synthesize_narration
 
 
@@ -29,6 +40,8 @@ class StoryPipelineResult:
     variation_id: str
     animation_seed: int
     music_track_id: str
+    visual_source: str
+    visual_model: str | None
 
 
 def _not_cancelled() -> None:
@@ -63,6 +76,8 @@ def _copy_controlled_fallback(
         variation_id=cached_request.variation_id,
         animation_seed=cached_request.animation_seed,
         music_track_id=music_track_id(cached_request.animation_seed),
+        visual_source="controlled_demo_cache",
+        visual_model=None,
     )
 
 
@@ -74,6 +89,8 @@ def run_story_pipeline(
     check_cancelled: CancellationCheck = _not_cancelled,
 ) -> StoryPipelineResult:
     normalized_path = work_directory / "normalized.mp4"
+    animation_input_path = work_directory / "animation-input.mp4"
+    generated_animation_path = work_directory / "generated-animation.mp4"
     narration_path = work_directory / "narration.mp3"
     output_path = work_directory / "pawspective-reel.mp4"
 
@@ -117,33 +134,64 @@ def run_story_pipeline(
             normalized_path,
             check_cancelled=check_cancelled,
         )
-        report(30)
+        report(25)
         story, story_source = generate_story(
             request,
             check_cancelled=check_cancelled,
         )
-        report(50)
+        report(38)
         synthesize_narration(
             story.narration_text,
             narration_path,
             check_cancelled=check_cancelled,
         )
-        report(65)
-        render_story_reel(
-            normalized_path,
-            narration_path,
-            request,
-            story,
-            output_path,
-            duration_ms,
-            check_cancelled=check_cancelled,
-        )
+        report(48)
+        try:
+            prepare_animation_source(
+                normalized_path,
+                animation_input_path,
+                request,
+                duration_ms,
+            )
+            prompt = build_animation_prompt(request, story)
+            visual_source, visual_model = generate_animated_video(
+                animation_input_path,
+                generated_animation_path,
+                prompt,
+                request,
+                work_directory,
+                check_cancelled,
+            )
+            report(80)
+            render_animated_story_reel(
+                generated_animation_path,
+                narration_path,
+                request,
+                story,
+                output_path,
+                check_cancelled=check_cancelled,
+            )
+        except (AnimationGenerationError, StoryRenderError):
+            if not settings.allow_local_animation_fallback:
+                raise
+            visual_source = "local_animation_fallback"
+            visual_model = None
+            render_story_reel(
+                normalized_path,
+                narration_path,
+                request,
+                story,
+                output_path,
+                duration_ms,
+                check_cancelled=check_cancelled,
+            )
         report(95)
     except (
         MediaValidationError,
         StoryGenerationError,
         VoiceGenerationError,
         StoryRenderError,
+        AnimationGenerationError,
     ):
         # Only the byte-verified cache's exact original request may use its
         # saved reel. Corrected or varied requests must fail rather than being
@@ -170,6 +218,8 @@ def run_story_pipeline(
         variation_id=request.variation_id,
         animation_seed=request.animation_seed,
         music_track_id=music_track_id(request.animation_seed),
+        visual_source=visual_source,
+        visual_model=visual_model,
     )
 
 
@@ -179,4 +229,5 @@ PIPELINE_ERRORS = (
     StoryGenerationError,
     VoiceGenerationError,
     StoryRenderError,
+    AnimationGenerationError,
 )

@@ -38,6 +38,8 @@ describe("Property 2: non-bug Story Reel presentation is preserved", () => {
         variationId: "preservation-variation",
         animationSeed: 7,
         musicTrackId: "curious-steps" as const,
+        visualSource: "gemini_omni" as const,
+        visualModel: "gemini-omni-flash-preview",
       };
 
       const rendered = render(
@@ -48,6 +50,8 @@ describe("Property 2: non-bug Story Reel presentation is preserved", () => {
           progress={100}
           error={null}
           disabled={false}
+          animationProvider="gemini_omni"
+          onAnimationProviderChange={vi.fn()}
           onRender={vi.fn()}
         />,
       );
@@ -59,9 +63,7 @@ describe("Property 2: non-bug Story Reel presentation is preserved", () => {
       expect(screen.getByRole("note").textContent).toContain(
         "not actual dog thoughts or exact canine vision",
       );
-      expect(
-        screen.getByText(/does not reconstruct exactly what a dog sees/i),
-      ).toBeDefined();
+      expect(screen.getByText(/does not reconstruct exact canine sight/i)).toBeDefined();
       expect(screen.getByText("Download reel")).toBeDefined();
       expect(createObjectURL).toHaveBeenCalledWith(result.video);
 

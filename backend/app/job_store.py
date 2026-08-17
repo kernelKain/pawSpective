@@ -25,6 +25,8 @@ class JobRecord:
     error: str | None
     story_source: str | None
     artifact_source: str | None
+    visual_source: str | None
+    visual_model: str | None
     voice_source: str | None
     variation_id: str | None
     animation_seed: int | None
@@ -34,6 +36,8 @@ class JobRecord:
 
 PROVENANCE_COLUMNS = {
     "artifact_source": "TEXT",
+    "visual_source": "TEXT",
+    "visual_model": "TEXT",
     "voice_source": "TEXT",
     "variation_id": "TEXT",
     "animation_seed": "INTEGER",
@@ -72,6 +76,8 @@ class JobStore:
                     error TEXT,
                     story_source TEXT,
                     artifact_source TEXT,
+                    visual_source TEXT,
+                    visual_model TEXT,
                     voice_source TEXT,
                     variation_id TEXT,
                     animation_seed INTEGER,
@@ -98,6 +104,7 @@ class JobStore:
                 WHERE status = 'completed'
                   AND (
                     artifact_source IS NULL
+                    OR visual_source IS NULL
                     OR voice_source IS NULL
                     OR variation_id IS NULL
                     OR animation_seed IS NULL
@@ -152,6 +159,8 @@ class JobStore:
                     error,
                     story_source,
                     artifact_source,
+                    visual_source,
+                    visual_model,
                     voice_source,
                     variation_id,
                     animation_seed,
@@ -175,6 +184,8 @@ class JobStore:
             error=row["error"],
             story_source=row["story_source"],
             artifact_source=row["artifact_source"],
+            visual_source=row["visual_source"],
+            visual_model=row["visual_model"],
             voice_source=row["voice_source"],
             variation_id=row["variation_id"],
             animation_seed=row["animation_seed"],
@@ -224,6 +235,8 @@ class JobStore:
         story_source: str,
         *,
         artifact_source: str | None = None,
+        visual_source: str | None = None,
+        visual_model: str | None = None,
         voice_source: str | None = None,
         variation_id: str | None = None,
         animation_seed: int | None = None,
@@ -240,6 +253,8 @@ class JobStore:
                     error = NULL,
                     story_source = ?,
                     artifact_source = ?,
+                    visual_source = ?,
+                    visual_model = ?,
                     voice_source = ?,
                     variation_id = ?,
                     animation_seed = ?,
@@ -251,6 +266,8 @@ class JobStore:
                     time.time(),
                     story_source,
                     artifact_source,
+                    visual_source,
+                    visual_model,
                     voice_source,
                     variation_id,
                     animation_seed,

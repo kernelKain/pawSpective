@@ -7,31 +7,70 @@ fictional Story Reels.
 
 ## What it does
 
-- Opens a live Human/Dog Vision comparison or accepts a 5–15 second video.
+- Opens a live Human/Dog Vision comparison or accepts a 5-15 second video.
 - Detects visible objects with Gemini and lets the user correct the result.
 - Measures foreground/background contrast with OpenCV and CIE Lab color.
 - Shows possible attention cues in a timestamp-aligned Curiosity Map.
 - Compares six screen colors in Toy Color Lab.
-- Creates a 15–25 second vertical MP4 with a predefined fictional voice.
+- Creates an 8-10 second animated dog-height POV reel with fictional narration.
 - Supports a SHA-256-bound controlled demo for offline rehearsals.
 
 PawSpective labels deterministic calculations as **Research-grounded**,
 model interpretation as **AI-inferred**, and fictional output as
 **Just for fun**. It does not claim exact canine vision, gaze, thoughts,
-emotions, smell, or behavioral diagnosis.
+emotions, smell, intent, or behavioral diagnosis. See the
+[AI disclosure](docs/AI_DISCLOSURE.md) for data flow, limitations, and provider
+details.
 
 ## Architecture
 
-- `frontend/`: Next.js 16 and React 19.
-- `backend/`: FastAPI, Pydantic, Gemini, OpenCV, FFmpeg, and ElevenLabs.
-- `contracts/`: exported JSON Schemas shared across product boundaries.
-- `media/`: local temporary uploads, job state, and generated reels; ignored by Git.
+```mermaid
+flowchart LR
+    User["Dog owner<br/>camera or uploaded clip"] --> Web["Next.js 16 / React 19<br/>browser application"]
+
+    subgraph Client["Browser processing"]
+        Web --> Lens["WebGL canine-color approximation"]
+        Web --> Review["Object review and correction"]
+        Web --> APIClient["Typed API client and job polling"]
+    end
+
+    APIClient -->|"HTTPS: video + validated JSON"| API["FastAPI / Pydantic API"]
+
+    subgraph Backend["Python backend"]
+        API --> Media["Upload validation, FFprobe,<br/>FFmpeg normalization"]
+        Media --> Quality["OpenCV quality inspection"]
+        Media --> Analysis["Gemini structured scene analysis"]
+        API --> Vision["OpenCV + NumPy deterministic<br/>visibility and Toy Color Lab"]
+        API --> JobDB["SQLite story-job metadata"]
+        JobDB --> Worker["Bounded background story worker"]
+        Worker --> Story["Gemini grounded story/art direction<br/>or deterministic template"]
+        Worker --> Voice["ElevenLabs fictional narration"]
+        Worker --> Animation["Gemini Omni clip edit or<br/>Veo reference-frame animation"]
+        Animation --> LocalFallback["Local animation fallback"]
+        Story --> Render["FFmpeg captions, music,<br/>audio, and 9:16 MP4 composition"]
+        Voice --> Render
+        Animation --> Render
+        LocalFallback --> Render
+        Render --> Storage["Writable media volume<br/>source clips, jobs, completed reels"]
+        API <--> Demo["SHA-256-verified controlled-demo cache"]
+        Contracts["Pydantic contracts + exported JSON Schemas"] --> API
+        Contracts --> Worker
+    end
+
+    Analysis -. "Google Gemini API" .-> Gemini[("Google Gemini")]
+    Story -. "structured generation" .-> Gemini
+    Animation -. "video or reference frames" .-> Gemini
+    Voice -. "narration text" .-> Eleven[("ElevenLabs")]
+    Storage -->|"status and MP4 download"| APIClient
+    Demo -->|"offline rehearsed assets"| APIClient
+```
 
 The frontend can run on Vercel. The backend requires FFmpeg, writable
-persistent storage, SQLite, and a long-running worker, so deploy it as the
-included Docker container on a compatible host.
+persistent storage, SQLite, and one long-running worker, so deploy it as the
+included Docker container on a compatible host. The SQLite job store is not
+designed for multiple backend replicas.
 
-## Local setup
+## Local development
 
 Prerequisites: Node.js 22, Python 3.13, FFmpeg, and FFprobe.
 
@@ -48,10 +87,12 @@ Copy-Item .env.example .env.local
 Set-Location ..
 ```
 
-Add Gemini and ElevenLabs credentials to `.env` for live analysis and voice
-synthesis. Never commit `.env`, `.env.local`, API keys, or generated media.
+Add Gemini and ElevenLabs credentials to `.env` for live AI and voice calls.
+Live animation also requires access to the configured Gemini Omni or Veo
+preview model. Set `PAWSPECTIVE_DEMO_MODE=false` to use live providers. Never
+commit `.env`, `.env.local`, API keys, uploads, generated audio, or reels.
 
-Start the backend and frontend in separate terminals:
+Start the services in separate terminals:
 
 ```powershell
 python -m uvicorn backend.app.main:app --reload --port 8000
@@ -62,23 +103,22 @@ Set-Location frontend
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Open `http://localhost:3000`. For container-based local development, configure
+`.env` and run `docker compose up --build`.
 
-## Configuration
+## Configuration and deployment
 
-The root `.env.example` documents backend settings. Important deployment
-values are:
+The root [.env.example](.env.example) documents backend and Compose settings;
+[frontend/.env.example](frontend/.env.example) documents the public API origin.
+Production requires exact CORS origins, persistent `/data` storage, one backend
+worker, and `NEXT_PUBLIC_API_BASE_URL` at frontend build time.
 
-- `GEMINI_API_KEY`
-- `ELEVENLABS_API_KEY`
-- `ELEVENLABS_DOG_VOICE_ID`
-- `PAWSPECTIVE_CORS_ORIGINS`
-- `PAWSPECTIVE_CONTROLLED_DEMO_ENABLED`
-- `NEXT_PUBLIC_API_BASE_URL` in `frontend/.env.local` or the Vercel project
+Controlled-demo support defaults to off. Enable it only after building and
+deploying every verified cache asset. Existing saved demo visuals must remain
+visibly labeled and must not be presented as a new live-model result.
 
-Controlled-demo support defaults to off because an empty cache must not make a
-fresh backend deployment unhealthy. Enable it only after building and
-deploying every verified cache asset.
+Follow the [deployment guide](docs/deployment.md) for the full environment,
+container, Vercel, health-check, and post-deployment procedure.
 
 ## Verification
 
@@ -92,15 +132,18 @@ python scripts/check_markdown_links.py
 python -m pytest backend/tests
 ```
 
-Real-media tests require FFmpeg and FFprobe. The full test suite validates
-upload constraints, malformed AI output, cancellation, visibility scoring,
-controlled-demo provenance, narration fallback, rendering, and job lifecycle.
+The GitHub Actions workflow also builds both production containers and runs a
+Playwright smoke test against the Compose stack.
 
 ## Documentation
 
-- [Product contract](docs/product-contract.md)
-- [Deployment guide](docs/deployment.md)
-- [Controlled demo](docs/controlled-demo.md)
-- [Release checklist](docs/release-checklist.md)
+| Document | Purpose |
+| --- | --- |
+| [AI disclosure](docs/AI_DISCLOSURE.md) | AI providers, submitted data, safeguards, retention, and limitations |
+| [Third-party notices](docs/THIRD_PARTY_NOTICES.md) | Dependency, media-tool, and hosted-service licensing notes |
+| [Product contract](docs/product-contract.md) | Product claims, labels, grounding rules, and deferred scope |
+| [Deployment guide](docs/deployment.md) | Production configuration and release procedure |
+| [Controlled demo](docs/controlled-demo.md) | Fingerprinted offline rehearsal assets and cache generation |
+| [Release checklist](docs/release-checklist.md) | Automated, browser, failure, privacy, and demo acceptance checks |
 
 Released under the [MIT License](LICENSE).

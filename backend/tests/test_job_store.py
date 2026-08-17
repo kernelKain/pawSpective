@@ -47,6 +47,8 @@ def test_job_lifecycle_and_expiration(
         variation_id="variation-a",
         animation_seed=7,
         music_track_id="curious-steps",
+        visual_source="gemini_omni",
+        visual_model="gemini-omni-flash-preview",
     )
     completed = store.get(completed_id)
 
@@ -58,6 +60,8 @@ def test_job_lifecycle_and_expiration(
     assert completed.variation_id == "variation-a"
     assert completed.animation_seed == 7
     assert completed.music_track_id == "curious-steps"
+    assert completed.visual_source == "gemini_omni"
+    assert completed.visual_model == "gemini-omni-flash-preview"
     assert completed.error is None
 
     store.create(failed_id, "failed.mp4")
@@ -90,7 +94,16 @@ def test_recovers_interrupted_jobs(tmp_path) -> None:
     store.create(running_id, "running.mp4")
     store.mark_running(running_id)
     store.create(completed_id, "completed.mp4")
-    store.mark_completed(completed_id, "template")
+    store.mark_completed(
+        completed_id,
+        "template",
+        artifact_source="live_render",
+        visual_source="local_animation_fallback",
+        voice_source="elevenlabs",
+        variation_id="original",
+        animation_seed=0,
+        music_track_id="sunny-paws",
+    )
 
     store.recover_interrupted_jobs()
 
