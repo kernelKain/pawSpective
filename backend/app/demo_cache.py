@@ -9,6 +9,7 @@ from backend.app.contracts import (
     StoryReelRequest,
     StoryScriptResponse,
 )
+from backend.app.media import probe_duration_ms
 from backend.app.settings import settings
 
 
@@ -29,6 +30,15 @@ REQUIRED_FILES = (
     STORY_FILENAME,
     MANIFEST_FILENAME,
 )
+HASH_FIELDS = {
+    CLIP_FILENAME: "clip_sha256",
+    ANALYSIS_FILENAME: "analysis_sha256",
+    STORY_REQUEST_FILENAME: "story_request_sha256",
+    NARRATION_FILENAME: "narration_sha256",
+    REEL_FILENAME: "reel_sha256",
+    STORY_FILENAME: "story_sha256",
+}
+MUSIC_TRACK_IDS = ("sunny-paws", "curious-steps", "cozy-walk")
 
 
 class DemoCacheError(RuntimeError):
@@ -50,10 +60,69 @@ def fingerprint(path: Path) -> str:
 
 
 def available() -> bool:
-    return settings.controlled_demo_enabled and all(
+    if not settings.controlled_demo_enabled or not all(
         cache_path(filename).is_file()
         for filename in REQUIRED_FILES
-    )
+    ):
+        return False
+
+    try:
+        payload = manifest()
+        if payload.get("cache_version") != "2.0":
+            return False
+        if payload.get("provenance") != "pawspective-controlled-demo-v2":
+            return False
+        if any(
+            payload.get(field) != fingerprint(cache_path(filename))
+            for filename, field in HASH_FIELDS.items()
+        ):
+            return False
+
+        request = cached_story_request()
+        cached_analysis = analysis()
+        story = cached_story()
+        relationships_match = (
+            request.analysis_source == "controlled_demo"
+            and request.events == cached_analysis.events
+            and payload.get("duration_ms") == cached_analysis.duration_ms
+            and payload.get("variation_id") == request.variation_id
+            and payload.get("animation_seed") == request.animation_seed
+            and payload.get("music_track_id")
+            == MUSIC_TRACK_IDS[request.animation_seed % len(MUSIC_TRACK_IDS)]
+            and payload.get("voice_source") == "controlled_demo_cache"
+            and payload.get("analysis_source") == "gemini"
+            and payload.get("story_source") == "gemini"
+            and payload.get("profile") == request.profile.model_dump(mode="json")
+        )
+        if not relationships_match:
+            return False
+
+        clip_duration_ms = probe_duration_ms(cache_path(CLIP_FILENAME))
+        narration_duration_ms = probe_duration_ms(cache_path(NARRATION_FILENAME))
+        reel_duration_ms = probe_duration_ms(cache_path(REEL_FILENAME))
+        if (
+            clip_duration_ms != cached_analysis.duration_ms
+            or narration_duration_ms > 23_000
+            or not 15_000 <= reel_duration_ms <= 25_000
+        ):
+            return False
+
+        # Import locally so lightweight cache metadata consumers do not load the
+        # provider SDK unless all cheaper cache checks have already succeeded.
+        from backend.app.story import (
+            StoryGenerationError,
+            validate_story_grounding,
+        )
+
+        try:
+            validate_story_grounding(story, request)
+        except StoryGenerationError as error:
+            raise DemoCacheError(
+                "The controlled demo story no longer matches its request."
+            ) from error
+        return True
+    except (DemoCacheError, OSError, ValueError):
+        return False
 
 
 def _read_json(filename: str) -> object:

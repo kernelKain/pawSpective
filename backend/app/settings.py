@@ -67,7 +67,7 @@ settings = Settings(
     ),
     controlled_demo_enabled=env_bool(
         "PAWSPECTIVE_CONTROLLED_DEMO_ENABLED",
-        True,
+        False,
     ),
     demo_cache_directory=Path(
         os.getenv(
@@ -102,7 +102,7 @@ settings = Settings(
         "ELEVENLABS_MODEL_ID",
         "eleven_flash_v2_5",
     ),
-        jobs_directory=Path(
+    jobs_directory=Path(
         os.getenv(
             "PAWSPECTIVE_JOBS_DIRECTORY",
             "media/jobs",

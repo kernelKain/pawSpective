@@ -106,7 +106,7 @@ afterEach(() => {
   vi.clearAllTimers();
   vi.useRealTimers();
   vi.unstubAllGlobals();
-  vi.clearAllMocks();
+  vi.resetAllMocks();
 });
 
 describe("sceneAnalysisApi", () => {
@@ -232,6 +232,11 @@ describe("sceneAnalysisApi", () => {
             download_url:
               "/api/v1/story-jobs/job-1/download",
             story_source: "gemini",
+            artifact_source: "live_render",
+            voice_source: "elevenlabs",
+            variation_id: "original",
+            animation_seed: 0,
+            music_track_id: "sunny-paws",
           }),
         )
         .mockResolvedValueOnce(
@@ -310,6 +315,8 @@ describe("sceneAnalysisApi", () => {
       ) as {
         analysis_source: string;
         style: string;
+        variation_id: string;
+        animation_seed: number;
         profile: StoryProfileInput;
         events: SceneEvent[];
         scores: VisibilityScore[];
@@ -319,6 +326,8 @@ describe("sceneAnalysisApi", () => {
       expect(payload).toMatchObject({
         analysis_source: "gemini",
         style: "nature_documentary",
+        variation_id: "original",
+        animation_seed: 0,
         featured_event_id: "event-1",
         profile,
       });
@@ -364,7 +373,14 @@ describe("sceneAnalysisApi", () => {
         renderedVideo,
       );
 
-      expect(result.source).toBe("gemini");
+      expect(result).toMatchObject({
+        source: "gemini",
+        artifactSource: "live_render",
+        voiceSource: "elevenlabs",
+        variationId: "original",
+        animationSeed: 0,
+        musicTrackId: "sunny-paws",
+      });
 
       expect(
         onProgress.mock.calls.map(
@@ -418,6 +434,11 @@ describe("sceneAnalysisApi", () => {
             download_url:
               "/api/v1/story-jobs/job-clamped/download",
             story_source: "template",
+            artifact_source: "live_render",
+            voice_source: "elevenlabs",
+            variation_id: "original",
+            animation_seed: 0,
+            music_track_id: "sunny-paws",
           }),
         )
         .mockResolvedValueOnce(
@@ -528,8 +549,14 @@ describe("sceneAnalysisApi", () => {
             error: null,
             download_url: null,
             story_source: "gemini",
+            artifact_source: "live_render",
+            voice_source: "elevenlabs",
+            variation_id: "original",
+            animation_seed: 0,
+            music_track_id: "sunny-paws",
           }),
-        );
+        )
+        .mockResolvedValueOnce(jsonResponse({}));
 
       const resultPromise =
         renderCapturedStoryReel(
@@ -551,6 +578,11 @@ describe("sceneAnalysisApi", () => {
       );
 
       await rejection;
+
+      expect(fetchMock).toHaveBeenLastCalledWith(
+        expect.stringContaining("/api/v1/story-jobs/job-no-download"),
+        expect.objectContaining({ method: "DELETE" }),
+      );
     },
   );
 
@@ -601,7 +633,7 @@ describe("sceneAnalysisApi", () => {
   );
 
   it(
-    "times out when the job never completes",
+    "continues polling beyond two minutes until aborted",
     async () => {
       fetchMock
         .mockResolvedValueOnce(
@@ -623,6 +655,7 @@ describe("sceneAnalysisApi", () => {
           }),
         );
 
+      const controller = new AbortController();
       const resultPromise =
         renderCapturedStoryReel(
           clip,
@@ -630,37 +663,41 @@ describe("sceneAnalysisApi", () => {
           scores,
           "event-1",
           profile,
+          controller.signal,
         );
 
       const rejection = expect(
         resultPromise,
-      ).rejects.toThrow(
-        "Story Reel generation exceeded the two-minute limit.",
-      );
+      ).rejects.toMatchObject({
+        name: "AbortError",
+      });
 
       await vi.advanceTimersByTimeAsync(
         120_000,
       );
 
-      await rejection;
-
       expect(
         fetchMock.mock.calls.length,
       ).toBeGreaterThan(1);
+
+      controller.abort();
+      await rejection;
     },
   );
 
   it(
     "cancels Story Reel polling with an AbortSignal",
     async () => {
-      fetchMock.mockResolvedValueOnce(
-        jsonResponse({
-          job_id: "job-cancelled",
-          status: "queued",
-          status_url:
-            "/api/v1/story-jobs/job-cancelled",
-        }),
-      );
+      fetchMock
+        .mockResolvedValueOnce(
+          jsonResponse({
+            job_id: "job-cancelled",
+            status: "queued",
+            status_url:
+              "/api/v1/story-jobs/job-cancelled",
+          }),
+        )
+        .mockResolvedValueOnce(jsonResponse({}));
 
       const controller =
         new AbortController();
@@ -681,11 +718,65 @@ describe("sceneAnalysisApi", () => {
         name: "AbortError",
       });
 
+      await vi.advanceTimersByTimeAsync(0);
       controller.abort();
 
       await rejection;
 
-      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock).toHaveBeenLastCalledWith(
+        expect.stringContaining("/api/v1/story-jobs/job-cancelled"),
+        expect.objectContaining({
+          method: "DELETE",
+          cache: "no-store",
+          keepalive: true,
+        }),
+      );
     },
   );
+});
+
+
+describe("Story variation cancellation", () => {
+  it("clears the legacy job reference and requests cancellation when polling is aborted", async () => {
+    window.localStorage.clear();
+    window.localStorage.setItem("pawspective-story-job-id", "legacy-job");
+    const controller = new AbortController();
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          job_id: "a".repeat(32),
+          status: "queued",
+          status_url: `/api/v1/story-jobs/${"a".repeat(32)}`,
+          variation_id: "variation-safe",
+          animation_seed: 7,
+          music_track_id: "curious-steps",
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({}));
+
+    const pending = renderCapturedStoryReel(
+      clip,
+      events,
+      scores,
+      "event-1",
+      profile,
+      controller.signal,
+      undefined,
+      "gemini",
+      { variationId: "variation-safe", animationSeed: 7 },
+    );
+
+    const rejection = expect(pending).rejects.toMatchObject({ name: "AbortError" });
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(window.localStorage.getItem("pawspective-story-job-id")).toBeNull();
+    controller.abort();
+    await rejection;
+
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.stringContaining("/api/v1/story-jobs/"),
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
 });

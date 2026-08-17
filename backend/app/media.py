@@ -2,7 +2,10 @@ import json
 import math
 import shutil
 import subprocess
+import time
+
 from pathlib import Path
+from typing import Callable
 
 from fastapi import UploadFile
 
@@ -107,47 +110,80 @@ def probe_duration_ms(video_path: Path) -> int:
 def normalize_video(
     source_path: Path,
     destination_path: Path,
+    check_cancelled: Callable[[], None] | None = None,
 ) -> None:
     if shutil.which("ffmpeg") is None:
         raise MediaValidationError(
             "FFmpeg is unavailable on the backend.",
         )
 
-    try:
-        result = subprocess.run(
-            [
-                "ffmpeg",
-                "-y",
-                "-i",
-                str(source_path),
-                "-an",
-                "-vf",
-                "scale=min(720\\,iw):-2,fps=15",
-                "-c:v",
-                "libx264",
-                "-preset",
-                "veryfast",
-                "-crf",
-                "23",
-                "-pix_fmt",
-                "yuv420p",
-                "-movflags",
-                "+faststart",
-                str(destination_path),
-            ],
-            capture_output=True,
-            text=True,
-            timeout=90,
-            check=False,
-        )
-    except subprocess.TimeoutExpired as error:
-        destination_path.unlink(missing_ok=True)
-        raise MediaValidationError(
-            "Video normalization timed out.",
-        ) from error
+    command = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(source_path),
+        "-an",
+        "-vf",
+        "scale=min(720\\,iw):-2,fps=15",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "23",
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
+        str(destination_path),
+    ]
+
+    if check_cancelled is None:
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=90,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as error:
+            destination_path.unlink(missing_ok=True)
+            raise MediaValidationError(
+                "Video normalization timed out.",
+            ) from error
+        return_code = result.returncode
+    else:
+        process: subprocess.Popen[bytes] | None = None
+        try:
+            check_cancelled()
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            deadline = time.monotonic() + 90
+            while process.poll() is None:
+                check_cancelled()
+                if time.monotonic() >= deadline:
+                    raise MediaValidationError("Video normalization timed out.")
+                time.sleep(0.1)
+            return_code = process.returncode
+            check_cancelled()
+        except Exception:
+            destination_path.unlink(missing_ok=True)
+            raise
+        finally:
+            if process is not None and process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=3)
 
     if (
-        result.returncode != 0
+        return_code != 0
         or not destination_path.exists()
         or destination_path.stat().st_size == 0
     ):

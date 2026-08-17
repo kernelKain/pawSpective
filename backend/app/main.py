@@ -55,6 +55,7 @@ from backend.app.media import (
 from backend.app.rate_limit import SlidingWindowRateLimiter
 from backend.app.settings import settings
 from backend.app.story_jobs import StoryJobManager
+from backend.app.story_render import music_track_id
 from backend.app.visibility import (
     VisibilityScoringError,
     score_visibility_events,
@@ -149,7 +150,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.cors_origins),
     allow_credentials=False,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "DELETE"],
     allow_headers=[
         "Content-Type",
         "X-Request-ID",
@@ -825,6 +826,9 @@ async def create_story_job(
         status_url=(
             f"/api/v1/story-jobs/{job_id}"
         ),
+        variation_id=story_request.variation_id,
+        animation_seed=story_request.animation_seed,
+        music_track_id=music_track_id(story_request.animation_seed),
     )
 
 
@@ -871,8 +875,30 @@ def get_story_job(
         progress=record.progress,
         error=record.error,
         story_source=record.story_source,
+        artifact_source=record.artifact_source,
+        voice_source=record.voice_source,
+        variation_id=record.variation_id,
+        animation_seed=record.animation_seed,
+        music_track_id=record.music_track_id,
         download_url=download_url,
     )
+
+
+@app.delete(
+    "/api/v1/story-jobs/{job_id}",
+    status_code=204,
+)
+def cancel_story_job(job_id: str) -> None:
+    if not re.fullmatch(r"[a-f0-9]{32}", job_id):
+        raise HTTPException(status_code=404, detail="Story job not found.")
+
+    record = job_store.get(job_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Story job not found or expired.")
+    if record.status in {"completed", "failed", "expired"}:
+        return
+
+    story_job_manager.cancel(job_id)
 
 
 @app.get(
@@ -923,7 +949,13 @@ def download_story_job(
         headers={
             "Cache-Control": "no-store",
             "X-PawSpective-Story-Source": (
-                record.story_source or "template"
+                record.story_source or "unknown"
+            ),
+            "X-PawSpective-Artifact-Source": (
+                record.artifact_source or "unknown"
+            ),
+            "X-PawSpective-Voice-Source": (
+                record.voice_source or "unknown"
             ),
         },
     )

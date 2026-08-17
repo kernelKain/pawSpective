@@ -122,7 +122,15 @@ def test_polling_queued_running_completed(job_api) -> None:
 
     output_path = directory / "pawspective-reel.mp4"
     output_path.write_bytes(b"rendered-mp4")
-    store.mark_completed(job_id, "gemini")
+    store.mark_completed(
+        job_id,
+        "gemini",
+        artifact_source="live_render",
+        voice_source="elevenlabs",
+        variation_id="variation-api",
+        animation_seed=8,
+        music_track_id="cozy-walk",
+    )
 
     completed = client.get(
         f"/api/v1/story-jobs/{job_id}",
@@ -131,6 +139,11 @@ def test_polling_queued_running_completed(job_api) -> None:
     assert completed.json()["status"] == "completed"
     assert completed.json()["progress"] == 100
     assert completed.json()["story_source"] == "gemini"
+    assert completed.json()["artifact_source"] == "live_render"
+    assert completed.json()["voice_source"] == "elevenlabs"
+    assert completed.json()["variation_id"] == "variation-api"
+    assert completed.json()["animation_seed"] == 8
+    assert completed.json()["music_track_id"] == "cozy-walk"
     assert completed.json()["download_url"].endswith(
         "/download",
     )
@@ -143,6 +156,12 @@ def test_polling_queued_running_completed(job_api) -> None:
     assert download.headers[
         "x-pawspective-story-source"
     ] == "gemini"
+    assert download.headers[
+        "x-pawspective-artifact-source"
+    ] == "live_render"
+    assert download.headers[
+        "x-pawspective-voice-source"
+    ] == "elevenlabs"
 
 
 def test_failed_job_response(job_api) -> None:
@@ -163,6 +182,11 @@ def test_failed_job_response(job_api) -> None:
         "progress": 5,
         "error": "Rendering failed safely.",
         "story_source": None,
+        "artifact_source": None,
+        "voice_source": None,
+        "variation_id": None,
+        "animation_seed": None,
+        "music_track_id": None,
         "download_url": None,
     }
 
@@ -295,3 +319,22 @@ def test_readiness_is_503_without_required_secrets(
         "ElevenLabs voice configuration is missing"
         in problems
     )
+
+
+def test_running_job_can_be_cancelled_idempotently(job_api) -> None:
+    store, manager = job_api
+    job_id = "d" * 32
+    directory = manager.job_directory(job_id)
+    directory.mkdir()
+    store.create(job_id, "cancelled.mp4")
+    store.mark_running(job_id)
+
+    first = client.delete(f"/api/v1/story-jobs/{job_id}")
+    second = client.delete(f"/api/v1/story-jobs/{job_id}")
+    status = client.get(f"/api/v1/story-jobs/{job_id}")
+
+    assert first.status_code == 204
+    assert second.status_code == 204
+    assert status.status_code == 200
+    assert status.json()["status"] == "cancelled"
+    assert status.json()["download_url"] is None

@@ -1,5 +1,14 @@
 import type { NextConfig } from "next";
 
+if (
+  process.env.VERCEL === "1" &&
+  !process.env.NEXT_PUBLIC_API_BASE_URL?.trim()
+) {
+  throw new Error(
+    "NEXT_PUBLIC_API_BASE_URL must be set before deploying PawSpective to Vercel.",
+  );
+}
+
 const nextConfig: NextConfig = {
   output: "standalone",
 

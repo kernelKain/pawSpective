@@ -1,5 +1,15 @@
 {
   "$defs": {
+    "MotionLevel": {
+      "enum": [
+        "none",
+        "low",
+        "medium",
+        "high"
+      ],
+      "title": "MotionLevel",
+      "type": "string"
+    },
     "StoryLine": {
       "additionalProperties": false,
       "properties": {
@@ -21,6 +31,15 @@
           "title": "Object Labels",
           "type": "array"
         },
+        "motion_levels": {
+          "items": {
+            "$ref": "#/$defs/MotionLevel"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "Motion Levels",
+          "type": "array"
+        },
         "text": {
           "maxLength": 220,
           "minLength": 1,
@@ -31,6 +50,7 @@
       "required": [
         "event_ids",
         "object_labels",
+        "motion_levels",
         "text"
       ],
       "title": "StoryLine",

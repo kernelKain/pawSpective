@@ -7,6 +7,7 @@ import pytest
 from backend.app.story import fallback_story
 from backend.app.story_render import (
     StoryRenderError,
+    ping_pong_frame_index,
     render_story_reel,
 )
 from backend.tests.test_story import story_request
@@ -180,3 +181,38 @@ def test_reports_missing_ffmpeg(
             tmp_path / "output.mp4",
             5_200,
         )
+
+
+def test_story_renderer_is_text_free_and_music_stays_below_voice() -> None:
+    import inspect
+    import backend.app.story_render as render_module
+
+    source = inspect.getsource(render_module)
+
+    assert "cv2.putText" not in source
+    assert "add_subtitle" not in source
+    assert render_module.MUSIC_TARGET_LUFS < render_module.NARRATION_TARGET_LUFS
+    assert "alimiter=limit=0.95" in source
+    assert "afade=t=in" in source
+    assert "afade=t=out" in source
+
+
+def test_music_choice_varies_with_animation_seed() -> None:
+    from backend.app.story_render import music_track_id
+
+    assert len({music_track_id(seed) for seed in range(3)}) == 3
+
+
+def test_ping_pong_progression_keeps_late_reel_frames_moving() -> None:
+    source_frames = 5 * 15
+    late_indices = [
+        ping_pong_frame_index(frame, 15, 15, source_frames)
+        for frame in range(14 * 15, 15 * 15)
+    ]
+
+    assert len(set(late_indices)) > 1
+    assert all(0 <= index < source_frames for index in late_indices)
+    assert all(
+        abs(current - previous) <= 1
+        for previous, current in zip(late_indices, late_indices[1:])
+    )

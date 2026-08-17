@@ -5,6 +5,7 @@ import type { ChangeEvent, FormEvent } from "react";
 
 import { CuriosityMap } from "./components/CuriosityMap";
 import { LiveDogLens } from "./components/LiveDogLens";
+import { PawSpectiveLogo } from "./components/PawSpectiveLogo";
 import { StoryReel } from "./components/StoryReel";
 import { ToyColorLab } from "./components/ToyColorLab";
 import { VisibilityInsight } from "./components/VisibilityInsight";
@@ -78,6 +79,91 @@ const defaultProfile: Profile = {
   photo: "",
 };
 
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+const MAX_PHOTO_EDGE = 6_000;
+const MAX_PHOTO_PIXELS = 24_000_000;
+const PHOTO_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
+
+function hasExpectedPhotoSignature(type: string, bytes: Uint8Array) {
+  if (type === "image/jpeg") {
+    return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  }
+  if (type === "image/png") {
+    return [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+      .every((value, index) => bytes[index] === value);
+  }
+  if (type === "image/webp") {
+    return String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" &&
+      String.fromCharCode(...bytes.slice(8, 12)) === "WEBP";
+  }
+  const gifHeader = String.fromCharCode(...bytes.slice(0, 6));
+  return gifHeader === "GIF87a" || gifHeader === "GIF89a";
+}
+
+async function validatePhoto(file: File) {
+  const header = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+  if (!hasExpectedPhotoSignature(file.type, header)) {
+    throw new Error("That file does not match its image format.");
+  }
+
+  let width = 0;
+  let height = 0;
+  if (typeof createImageBitmap === "function") {
+    const bitmap = await createImageBitmap(file);
+    try {
+      width = bitmap.width;
+      height = bitmap.height;
+    } finally {
+      bitmap.close();
+    }
+  } else {
+    const objectUrl = URL.createObjectURL(file);
+    try {
+      const image = new Image();
+      image.src = objectUrl;
+      if (typeof image.decode === "function") {
+        await image.decode();
+      } else {
+        await new Promise<void>((resolve, reject) => {
+          image.onload = () => resolve();
+          image.onerror = () => reject(new Error("That photo could not be decoded."));
+        });
+      }
+      width = image.naturalWidth;
+      height = image.naturalHeight;
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  }
+
+  if (
+    width <= 0 ||
+    height <= 0 ||
+    width > MAX_PHOTO_EDGE ||
+    height > MAX_PHOTO_EDGE ||
+    width * height > MAX_PHOTO_PIXELS
+  ) {
+    throw new Error("Choose a photo up to 6000 px per side and 24 megapixels.");
+  }
+}
+
+function readPhoto(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () =>
+      typeof reader.result === "string"
+        ? resolve(reader.result)
+        : reject(new Error("That photo could not be read."));
+    reader.onerror = () => reject(new Error("That photo could not be read."));
+    reader.readAsDataURL(file);
+  });
+}
+
 function formatTimestamp(timestampMs: number) {
   return `${(timestampMs / 1000).toFixed(1)}s`;
 }
@@ -100,6 +186,8 @@ export function PawSpectiveShell({
     );
   const [accuracyOpen, setAccuracyOpen] =
     useState(false);
+  const [photoError, setPhotoError] =
+    useState<string | null>(null);
   const [capturedClip, setCapturedClip] =
     useState<CapturedClip | null>(null);
   const [analysisError, setAnalysisError] =
@@ -145,6 +233,11 @@ export function PawSpectiveShell({
   const storyRequestIdRef = useRef(0);
   const storyAbortControllerRef =
     useRef<AbortController | null>(null);
+  const usedVariationIdsRef = useRef(new Set<string>());
+  const lastAnimationSeedRef = useRef<number | null>(null);
+  const photoRequestIdRef = useRef(0);
+  const accuracyCloseRef = useRef<HTMLButtonElement | null>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   const [colorSimulation, setColorSimulation] =
     useState<ColorSimulationResponse | null>(null);
@@ -205,6 +298,41 @@ export function PawSpectiveShell({
     };
   }, []);
 
+  useEffect(() => {
+    if (!accuracyOpen) return;
+
+    previousFocusRef.current = document.activeElement as HTMLElement | null;
+    const focusDrawer = () => accuracyCloseRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setAccuracyOpen(false);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const drawer = accuracyCloseRef.current?.closest("aside");
+      const focusable = drawer?.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      );
+      if (!focusable?.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    queueMicrotask(focusDrawer);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      previousFocusRef.current?.focus();
+    };
+  }, [accuracyOpen]);
+
   function updateProfile<
     K extends keyof Profile,
   >(
@@ -253,29 +381,43 @@ export function PawSpectiveShell({
     });
   }
 
-  function handlePhoto(
+  async function handlePhoto(
     event: ChangeEvent<HTMLInputElement>,
   ) {
-    const file = event.target.files?.[0];
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    const requestId = photoRequestIdRef.current + 1;
+    photoRequestIdRef.current = requestId;
+    setPhotoError(null);
 
-    if (!file) {
+    if (!file) return;
+    if (!PHOTO_TYPES.has(file.type)) {
+      setPhotoError("Choose a JPG, PNG, WebP, or GIF image.");
+      input.value = "";
+      return;
+    }
+    if (file.size > MAX_PHOTO_BYTES) {
+      setPhotoError("Choose a dog photo smaller than 5 MB.");
+      input.value = "";
       return;
     }
 
-    const reader = new FileReader();
-
-    reader.onload = () => {
-      if (
-        typeof reader.result === "string"
-      ) {
-        updateProfile(
-          "photo",
-          reader.result,
-        );
+    try {
+      await validatePhoto(file);
+      const photo = await readPhoto(file);
+      if (photoRequestIdRef.current === requestId) {
+        updateProfile("photo", photo);
       }
-    };
-
-    reader.readAsDataURL(file);
+    } catch (error) {
+      if (photoRequestIdRef.current === requestId) {
+        setPhotoError(
+          error instanceof Error
+            ? error.message
+            : "That photo could not be read. Try another image.",
+        );
+        input.value = "";
+      }
+    }
   }
 
   function submitProfile(
@@ -294,6 +436,8 @@ export function PawSpectiveShell({
     setAnalysisSource(null);
     setEvents([]);
     setSelectedEventId("");
+    usedVariationIdsRef.current.clear();
+    lastAnimationSeedRef.current = null;
     invalidateVisibilityScores();
   }
 
@@ -548,6 +692,32 @@ export function PawSpectiveShell({
           abortController.signal,
           setStoryProgress,
           analysisSource,
+          (() => {
+            const cachedOriginal =
+              analysisSource === "controlled_demo" &&
+              usedVariationIdsRef.current.size === 0;
+            let variationId = cachedOriginal
+              ? "original"
+              : globalThis.crypto?.randomUUID?.().replaceAll("-", "") ??
+                `variation-${Date.now()}-${usedVariationIdsRef.current.size}`;
+            while (usedVariationIdsRef.current.has(variationId)) {
+              variationId = `${variationId}-${usedVariationIdsRef.current.size + 1}`;
+            }
+            usedVariationIdsRef.current.add(variationId);
+            let animationSeed = cachedOriginal
+              ? 0
+              : globalThis.crypto?.getRandomValues
+                ? globalThis.crypto.getRandomValues(new Uint32Array(1))[0] & 0x7fffffff
+                : (Date.now() + usedVariationIdsRef.current.size) & 0x7fffffff;
+            if (
+              lastAnimationSeedRef.current !== null &&
+              animationSeed % 3 === lastAnimationSeedRef.current % 3
+            ) {
+              animationSeed = (animationSeed + 1) & 0x7fffffff;
+            }
+            lastAnimationSeedRef.current = animationSeed;
+            return { variationId, animationSeed };
+          })(),
         );
 
       if (
@@ -726,7 +896,12 @@ export function PawSpectiveShell({
     isScoring || isRenderingStory || isSimulatingColor;
 
   return (
-    <main className="app-shell">
+    <>
+      <main
+        className="app-shell"
+        aria-hidden={accuracyOpen ? "true" : undefined}
+        inert={accuracyOpen}
+      >
       <header className="topbar">
         <button
           className="brand"
@@ -738,9 +913,7 @@ export function PawSpectiveShell({
           }}
           aria-label="Return to profile"
         >
-          <span className="brand-mark">
-            P
-          </span>
+          <PawSpectiveLogo compact />
 
           <span>
             <strong>
@@ -755,8 +928,8 @@ export function PawSpectiveShell({
         </button>
 
         <div className="topbar-actions">
-          <span className="phase-badge">
-            Phase 8 · Reliable demo
+          <span className="status-badge">
+            Reliable by design
           </span>
 
           <button
@@ -849,10 +1022,19 @@ export function PawSpectiveShell({
                 </strong>
 
                 <small>
-                  Open the Accuracy Drawer
+                  See what is measured and what is fictional
                 </small>
               </span>
             </button>
+
+            <div className="how-it-works" aria-label="How it works">
+              <strong>How it works</strong>
+              <ol>
+                <li><span>1</span>Create a dog profile.</li>
+                <li><span>2</span>Record or upload a 5–15 second moment.</li>
+                <li><span>3</span>Review objects, compare visibility, and make a sketch reel.</li>
+              </ol>
+            </div>
           </div>
 
           <form
@@ -873,8 +1055,9 @@ export function PawSpectiveShell({
 
                 <input
                   type="file"
-                  accept="image/*"
-                  onChange={handlePhoto}
+                  aria-label="Dog photo"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  onChange={(event) => void handlePhoto(event)}
                 />
               </label>
 
@@ -884,11 +1067,23 @@ export function PawSpectiveShell({
                 </strong>
 
                 <small>
-                  Optional · used as the
-                  profile avatar
+                  Optional · stays in this browser and is never sent for story generation
                 </small>
               </div>
             </div>
+
+            {photoError && (
+              <p className="field-error" role="alert">
+                {photoError}
+              </p>
+            )}
+
+            <p className="context-note" role="note">
+              Your photo stays in this browser. Profile text is sent to the
+              PawSpective backend; dog details may be shared with Gemini for
+              live story framing and included in narration sent to ElevenLabs
+              for voice synthesis. Your first name is sent to neither provider.
+            </p>
 
             <div className="field-grid">
               <label>
@@ -902,10 +1097,12 @@ export function PawSpectiveShell({
                   onChange={(event) =>
                     updateProfile(
                       "ownerName",
-                      event.target.value,
+                      event.target.value.slice(0, 60),
                     )
                   }
-                  placeholder="Kshitij"
+                  maxLength={60}
+                  autoComplete="given-name"
+                  placeholder="Alex"
                 />
               </label>
 
@@ -920,9 +1117,11 @@ export function PawSpectiveShell({
                   onChange={(event) =>
                     updateProfile(
                       "dogName",
-                      event.target.value,
+                      event.target.value.slice(0, 40),
                     )
                   }
+                  maxLength={40}
+                  autoComplete="off"
                   placeholder="Bruno"
                 />
               </label>
@@ -932,11 +1131,12 @@ export function PawSpectiveShell({
               Breed or mix
 
               <input
+                maxLength={80}
                 value={profile.breed}
                 onChange={(event) =>
                   updateProfile(
                     "breed",
-                    event.target.value,
+                    event.target.value.slice(0, 80),
                   )
                 }
                 placeholder="Optional"
@@ -1241,10 +1441,8 @@ export function PawSpectiveShell({
           </h1>
 
           <p className="lead">
-            The video is being validated,
-            normalized, and analyzed
-            against the strict Phase 0
-            scene contract.
+            We&apos;re checking the clip and finding clearly visible objects.
+            Your original media stays temporary and is cleaned up after processing.
           </p>
 
           <div className="processing-list">
@@ -1308,9 +1506,8 @@ export function PawSpectiveShell({
 
           {analysisSource === "controlled_demo" && (
             <div className="controlled-demo-notice">
-              Rehearsal mode is using the exact SHA-256-verified controlled
-              clip and its cached analysis provenance. Renaming labels is
-              allowed; geometry and visible evidence remain locked.
+              Rehearsal mode is using the exact verified demo clip and its saved
+              analysis. You can rename labels; the measured scene stays locked.
             </div>
           )}
 
@@ -1487,12 +1684,9 @@ export function PawSpectiveShell({
 
               {analysisSource ===
                 "demo" && (
-                <p className="phase-note">
-                  Visibility scoring is
-                  disabled because cached
-                  bounding boxes do not
-                  belong to this uploaded
-                  clip.
+                <p className="context-note">
+                  Cached example markers do not match this uploaded clip.
+                  Run live analysis or use the verified rehearsal clip.
                 </p>
               )}
 
@@ -1631,6 +1825,13 @@ export function PawSpectiveShell({
                     isScoring ||
                     isRenderingStory
                   }
+                  disabledReason={
+                    !selectedVisibilityScore
+                      ? "Calculate visibility for the selected object first."
+                      : isScoring || isRenderingStory
+                        ? "Wait for the current task to finish."
+                        : undefined
+                  }
                   onSimulate={() => void calculateColorSimulation()}
                 />
               ) : (
@@ -1664,10 +1865,16 @@ export function PawSpectiveShell({
                 disabled={
                   (analysisSource !== "gemini" &&
                     analysisSource !== "controlled_demo") ||
-                  visibilityScores.length ===
-                    0 ||
+                  visibilityScores.length === 0 ||
                   isScoring ||
                   isSimulatingColor
+                }
+                disabledReason={
+                  visibilityScores.length === 0
+                    ? "Review the objects and calculate visibility first."
+                    : isScoring || isSimulatingColor
+                      ? "Wait for the current calculation to finish."
+                      : undefined
                 }
                 onRender={() =>
                   void createStoryReel()
@@ -1686,6 +1893,7 @@ export function PawSpectiveShell({
           Transparent enough to trust.
         </p>
       </footer>
+      </main>
 
       {accuracyOpen && (
         <div className="drawer-layer">
@@ -1705,6 +1913,7 @@ export function PawSpectiveShell({
             aria-labelledby="accuracy-title"
           >
             <button
+              ref={accuracyCloseRef}
               className="drawer-close"
               type="button"
               onClick={() =>
@@ -1771,9 +1980,8 @@ export function PawSpectiveShell({
                 </strong>
 
                 <p>
-                  Fictional dog narration,
-                  cat commentary and
-                  playful story framing.
+                  Fictional first-person dog narration and playful story framing.
+                  It is entertainment—not actual dog thoughts.
                 </p>
               </div>
             </div>
@@ -1794,6 +2002,6 @@ export function PawSpectiveShell({
           </aside>
         </div>
       )}
-    </main>
+    </>
   );
 }

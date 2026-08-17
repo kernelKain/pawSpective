@@ -17,6 +17,10 @@ from backend.tests.test_story import story_request
 
 
 def configure_pipeline(monkeypatch) -> None:
+    def fake_render(*args, check_cancelled) -> None:
+        check_cancelled()
+        args[4].write_bytes(b"fake-story-mp4")
+
     monkeypatch.setattr(
         pipeline_module,
         "probe_duration_ms",
@@ -25,7 +29,7 @@ def configure_pipeline(monkeypatch) -> None:
     monkeypatch.setattr(
         pipeline_module,
         "normalize_video",
-        lambda source, destination: copyfile(
+        lambda source, destination, **kwargs: copyfile(
             source,
             destination,
         ),
@@ -33,7 +37,7 @@ def configure_pipeline(monkeypatch) -> None:
     monkeypatch.setattr(
         pipeline_module,
         "generate_story",
-        lambda request: (
+        lambda request, **kwargs: (
             fallback_story(request),
             "template",
         ),
@@ -41,16 +45,14 @@ def configure_pipeline(monkeypatch) -> None:
     monkeypatch.setattr(
         pipeline_module,
         "synthesize_narration",
-        lambda text, destination: destination.write_bytes(
+        lambda text, destination, **kwargs: destination.write_bytes(
             b"audio",
         ),
     )
     monkeypatch.setattr(
         pipeline_module,
         "render_story_reel",
-        lambda *args: args[4].write_bytes(
-            b"fake-story-mp4",
-        ),
+        fake_render,
     )
 
 
@@ -74,6 +76,11 @@ def test_pipeline_renders_downloadable_mp4(
         b"fake-story-mp4"
     )
     assert result.story_source == "template"
+    assert result.artifact_source == "live_render"
+    assert result.voice_source == "elevenlabs"
+    assert result.variation_id == "original"
+    assert result.animation_seed == 0
+    assert result.music_track_id == "sunny-paws"
     assert progress == [10, 30, 50, 65, 95]
 
 
@@ -110,9 +117,14 @@ def test_matching_controlled_request_bypasses_voice_and_rendering(
         lambda destination: destination.write_bytes(b"cached reel"),
     )
     monkeypatch.setattr(
+        pipeline_module.demo_cache,
+        "cached_story_request",
+        lambda: request,
+    )
+    monkeypatch.setattr(
         pipeline_module,
         "synthesize_narration",
-        lambda *args: (_ for _ in ()).throw(
+        lambda *args, **kwargs: (_ for _ in ()).throw(
             VoiceGenerationError("ElevenLabs timed out")
         ),
     )
@@ -120,6 +132,11 @@ def test_matching_controlled_request_bypasses_voice_and_rendering(
     result = run_story_pipeline(source_path, request, tmp_path, progress.append)
 
     assert result.story_source == "demo_cache"
+    assert result.artifact_source == "controlled_demo_cache"
+    assert result.voice_source == "controlled_demo_cache"
+    assert result.variation_id == request.variation_id
+    assert result.animation_seed == request.animation_seed
+    assert result.music_track_id == "sunny-paws"
     assert result.output_path.read_bytes() == b"cached reel"
     assert progress == [10, 95]
 
@@ -232,11 +249,14 @@ def test_pipeline_requires_rendered_output(
     tmp_path,
     monkeypatch,
 ) -> None:
+    def skip_output(*args, check_cancelled) -> None:
+        check_cancelled()
+
     configure_pipeline(monkeypatch)
     monkeypatch.setattr(
         pipeline_module,
         "render_story_reel",
-        lambda *args: None,
+        skip_output,
     )
     source_path = tmp_path / "source.mp4"
     source_path.write_bytes(b"video")
@@ -251,3 +271,49 @@ def test_pipeline_requires_rendered_output(
             tmp_path,
             lambda _: None,
         )
+
+
+def test_modified_controlled_request_never_receives_original_cached_reel(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    configure_pipeline(monkeypatch)
+    source_path = tmp_path / "source.mp4"
+    source_path.write_bytes(b"verified demo")
+    request = story_request().model_copy(
+        update={
+            "analysis_source": "controlled_demo",
+            "variation_id": "new-variation",
+            "animation_seed": 2,
+        }
+    )
+    copied = False
+
+    monkeypatch.setattr(
+        pipeline_module.demo_cache,
+        "matches_story_request",
+        lambda _: False,
+    )
+    monkeypatch.setattr(
+        pipeline_module.demo_cache,
+        "require_matching_clip",
+        lambda _: None,
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "generate_story",
+        lambda _, **kwargs: (_ for _ in ()).throw(
+            StoryGenerationError("offline")
+        ),
+    )
+
+    def copy_reel(_destination) -> None:
+        nonlocal copied
+        copied = True
+
+    monkeypatch.setattr(pipeline_module.demo_cache, "copy_reel_to", copy_reel)
+
+    with pytest.raises(pipeline_module.DemoCacheError, match="does not match"):
+        run_story_pipeline(source_path, request, tmp_path, lambda _: None)
+
+    assert not copied

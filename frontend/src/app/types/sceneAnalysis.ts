@@ -10,12 +10,7 @@ export type SceneEvent = {
     | "vehicle"
     | "environment"
     | "other";
-  bounding_box: {
-    x_min: number;
-    y_min: number;
-    x_max: number;
-    y_max: number;
-  };
+  bounding_box: { x_min: number; y_min: number; x_max: number; y_max: number };
   confidence: number;
   visible_evidence: string;
   motion_level: "none" | "low" | "medium" | "high";
@@ -29,11 +24,7 @@ export type SceneAnalysis = {
 };
 
 export type AnalysisSource = "gemini" | "demo" | "controlled_demo";
-
-export type AnalyzeVideoResponse = {
-  analysis: SceneAnalysis;
-  source: AnalysisSource;
-};
+export type AnalyzeVideoResponse = { analysis: SceneAnalysis; source: AnalysisSource };
 
 export type CapturedClip = {
   file: File;
@@ -42,27 +33,21 @@ export type CapturedClip = {
 };
 
 export type SalienceLevel = "low" | "medium" | "high";
-
 export type VisibilityScore = {
   event_id: string;
   identification_confidence: number;
-
   human_contrast_score: number;
   dog_contrast_score: number;
   contrast_change: number;
-
   motion_score: number;
   apparent_size_score: number;
   profile_relevance_score: number;
-
   salience_score: number;
   salience_level: SalienceLevel;
-
   human_object_color: string;
   human_background_color: string;
   dog_object_color: string;
   dog_background_color: string;
-
   explanation: string;
   why: string[];
 };
@@ -74,14 +59,7 @@ export type VisibilityAnalysisResponse = {
   warnings: string[];
 };
 
-export type ToyColorId =
-  | "blue"
-  | "yellow"
-  | "red"
-  | "green"
-  | "orange"
-  | "purple";
-
+export type ToyColorId = "blue" | "yellow" | "red" | "green" | "orange" | "purple";
 export type ColorSimulationOption = {
   color_id: ToyColorId;
   label: string;
@@ -121,29 +99,40 @@ export type StoryProfileInput = {
 };
 
 export type StoryReelSource = "gemini" | "template" | "demo_cache";
-
+export type StoryArtifactSource = "live_render" | "controlled_demo_cache";
+export type StoryVoiceSource = "elevenlabs" | "controlled_demo_cache";
+export type MusicTrackId = "sunny-paws" | "curious-steps" | "cozy-walk";
+export type StoryVariation = { variationId: string; animationSeed: number };
 export type StoryReelResult = {
   video: Blob;
   source: StoryReelSource;
+  artifactSource: StoryArtifactSource;
+  voiceSource: StoryVoiceSource;
+  variationId: string;
+  animationSeed: number;
+  musicTrackId: MusicTrackId;
 };
 
 export type StoryJobCreateResponse = {
   job_id: string;
   status: "queued";
   status_url: string;
+  variation_id: string;
+  animation_seed: number;
+  music_track_id: MusicTrackId;
 };
 
 export type StoryJobStatusResponse = {
   job_id: string;
-  status:
-    | "queued"
-    | "running"
-    | "completed"
-    | "failed"
-    | "expired";
+  status: "queued" | "running" | "completed" | "failed" | "cancelled" | "expired";
   progress: number;
   error: string | null;
   story_source: StoryReelSource | null;
+  artifact_source: StoryArtifactSource | null;
+  voice_source: StoryVoiceSource | null;
+  variation_id: string | null;
+  animation_seed: number | null;
+  music_track_id: MusicTrackId | null;
   download_url: string | null;
 };
 
@@ -153,8 +142,4 @@ export type ControlledDemoStatus = {
   clip_url: string | null;
   profile: StoryProfileInput | null;
 };
-
-export type ControlledDemoBundle = {
-  clip: CapturedClip;
-  profile: StoryProfileInput;
-};
+export type ControlledDemoBundle = { clip: CapturedClip; profile: StoryProfileInput };

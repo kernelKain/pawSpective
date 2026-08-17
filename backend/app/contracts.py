@@ -1,7 +1,13 @@
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 
 class StrictModel(BaseModel):
@@ -201,10 +207,36 @@ class StoryProfile(StrictModel):
     )
     favorite_interest: str = Field(default="", max_length=40)
 
+    @field_validator(
+        "owner_name",
+        "dog_name",
+        "breed",
+        "favorite_interest",
+        mode="before",
+    )
+    @classmethod
+    def sanitize_text(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        return " ".join(value.replace("\x00", "").split())
+
+    @field_validator("personality_tags", mode="before")
+    @classmethod
+    def sanitize_tags(cls, value: object) -> object:
+        if not isinstance(value, list):
+            return value
+        return [
+            " ".join(tag.replace("\x00", "").split())[:40]
+            if isinstance(tag, str)
+            else tag
+            for tag in value
+        ]
+
 
 class StoryLine(StrictModel):
     event_ids: list[str] = Field(min_length=1, max_length=3)
     object_labels: list[str] = Field(min_length=1, max_length=3)
+    motion_levels: list[MotionLevel] = Field(min_length=1, max_length=3)
     text: str = Field(min_length=1, max_length=220)
 
 
@@ -237,6 +269,13 @@ class StoryScriptResponse(StrictModel):
 class StoryReelRequest(StrictModel):
     analysis_source: Literal["gemini", "controlled_demo"]
     style: Literal["nature_documentary"] = "nature_documentary"
+    variation_id: str = Field(
+        default="original",
+        min_length=1,
+        max_length=64,
+        pattern=r"^[a-zA-Z0-9_-]+$",
+    )
+    animation_seed: int = Field(default=0, ge=0, le=2_147_483_647)
     profile: StoryProfile
     events: list[SceneEvent] = Field(min_length=1, max_length=12)
     scores: list[VisibilityScore] = Field(min_length=1, max_length=12)
@@ -278,6 +317,13 @@ class StoryJobCreateResponse(StrictModel):
     )
     status: Literal["queued"]
     status_url: str
+    variation_id: str
+    animation_seed: int
+    music_track_id: Literal[
+        "sunny-paws",
+        "curious-steps",
+        "cozy-walk",
+    ]
 
 
 class StoryJobStatusResponse(StrictModel):
@@ -289,6 +335,7 @@ class StoryJobStatusResponse(StrictModel):
         "running",
         "completed",
         "failed",
+        "cancelled",
         "expired",
     ]
     progress: int = Field(ge=0, le=100)
@@ -300,5 +347,20 @@ class StoryJobStatusResponse(StrictModel):
         "gemini",
         "template",
         "demo_cache",
+    ] | None = None
+    artifact_source: Literal[
+        "live_render",
+        "controlled_demo_cache",
+    ] | None = None
+    voice_source: Literal[
+        "elevenlabs",
+        "controlled_demo_cache",
+    ] | None = None
+    variation_id: str | None = None
+    animation_seed: int | None = Field(default=None, ge=0, le=2_147_483_647)
+    music_track_id: Literal[
+        "sunny-paws",
+        "curious-steps",
+        "cozy-walk",
     ] | None = None
     download_url: str | None = None

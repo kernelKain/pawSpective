@@ -154,7 +154,7 @@ nearby background of one corrected Gemini event.
 The calculation:
 
 1. Seeks to the corrected event timestamp.
-2. Reuses the Phase 4 inner object and surrounding-background regions.
+2. Reuses the visibility scorer's inner object and surrounding-background regions.
 3. Keeps the measured nearby-background color unchanged.
 4. Replaces only the object-color input to the contrast formula with one fixed
    palette color.
@@ -223,37 +223,3 @@ The generated story must:
 - Avoid claims about emotions, thoughts, gaze, smell, or intent
 - Fit the target video duration
 - Identify the voice as fictional
-
-## Phase 0 exit criteria
-Phase 0 is complete when:
-
-- This contract is approved.
-- The Gemini response model exists.
-- The example response passes validation.
-- Invalid bounding boxes fail validation.
-- Impossible timestamps fail validation.
-- Unexpected fields fail validation.
-- The JSON Schema can be generated from the Python model.
-- The demo team agrees on the must-ship and deferred lists.
-
-## Phase 4 exit criteria
-
-Phase 4 implementation is complete when:
-
-- Corrected Gemini events can be scored against their original normalized
-  video.
-- Real FFmpeg/OpenCV tests cover seeking, scoring, invalid timestamps,
-  unreadable frames, undersized regions, partial warnings, and complete
-  scoring failure.
-- Golden transformation, known-color contrast, component-weight, and rounding
-  regressions pass.
-- Curiosity Map video is uncropped and its overlay shares the exact video
-  content rectangle for portrait and landscape clips.
-- Playback controls do not occupy the normalized overlay coordinate area.
-- AI-inferred motion is distinguished from measured and deterministic inputs.
-- Editing or navigation cannot restore stale in-flight scoring results.
-- Demo-result scoring remains prohibited.
-- Automated lint, frontend tests, production build, and backend tests pass.
-
-Release acceptance additionally requires the physical-device and live-Gemini
-checks in `docs/phase-4-acceptance-checklist.md`.

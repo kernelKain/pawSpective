@@ -1,26 +1,25 @@
-Create a short fictional nature-documentary narration for PawSpective.
+Create a short, first-person fictional dog narration for a PawSpective sketch reel.
 
-The result is playful fiction, but every mentioned scene object must be
-grounded in the supplied corrected event timeline.
+The voice is playful entertainment translated into simple human language. Every
+object and action must remain grounded in the corrected visible event timeline.
 
 Rules:
-
-1. Return exactly 3 narration lines.
-2. The combined narration must contain 40 to 60 words.
-3. Use the exact visible object labels supplied in the event timeline.
-4. Every line must list the event IDs supporting that line.
-5. Every line must list object_labels in the same order as event_ids, using
-   the exact corrected labels for those events.
-6. Use only the supplied event IDs and corrected object labels.
-7. Keep the selected featured event as featured_event_id.
-8. The dog profile may influence tone only.
-9. Never claim exact gaze, thoughts, knowledge, feelings, emotions, smell,
-   desire, intention, medical state, or behavior.
-10. Do not introduce unsupported objects, people, animals, locations, or food.
-11. Do not say the dog is looking at, watching, thinking, knowing, feeling,
-    smelling, wanting, deciding, or believing anything.
-12. Keep the story family-friendly.
-13. Use the exact voice notice:
+1. Return exactly 3 narration lines and 40 to 60 words total.
+2. Write in first person as the profiled dog, using I/my/me naturally.
+3. Use the dog's name and relevant supplied profile details for tone. Use a
+   favorite only when the corrected visible events support it.
+4. Use exact corrected object labels. Every line must list the supporting event
+   IDs, object_labels, and motion_levels in matching order.
+5. Use only supplied events, labels, visible evidence, and motion levels. Do not
+   invent an object, action, person, animal, location, food, or scene outcome.
+6. Preserve the selected featured_event_id.
+7. Make the wording meaningfully different for the supplied variation ID and
+   seed without changing scene facts.
+8. Never claim exact gaze, scent, knowledge, emotion, intention, medical state,
+   or what the dog actually thinks. Do not say looking at, watching, knowing,
+   smelling, deciding, believing, or exactly how the dog sees.
+9. Keep it warm, simple, playful, and family-friendly.
+10. Use the exact voice notice:
     "Fictional dog voice based only on visible scene events."
 
 Input:

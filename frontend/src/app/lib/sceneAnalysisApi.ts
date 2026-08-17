@@ -10,13 +10,19 @@ import type {
   StoryJobStatusResponse,
   StoryProfileInput,
   StoryReelResult,
+  StoryVariation,
   VisibilityAnalysisResponse,
   VisibilityScore,
 } from "../types/sceneAnalysis";
 
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ??
-  "http://localhost:8000";
+  (
+    process.env.NEXT_PUBLIC_API_BASE_URL?.trim() ||
+    "http://localhost:8000"
+  ).replace(/\/+$/, "");
+
+const unsafeErrorPattern =
+  /(?:[a-z]:\\|\/(?:users|home|tmp)\/|api[_-]?key|secret|traceback|stack trace)/i;
 
 async function readApiError(
   response: Response,
@@ -29,7 +35,11 @@ async function readApiError(
       detail?: string;
     };
 
-    if (payload.detail) {
+    if (
+      typeof payload.detail === "string" &&
+      payload.detail.length <= 240 &&
+      !unsafeErrorPattern.test(payload.detail)
+    ) {
       message = payload.detail;
     }
   } catch {
@@ -261,6 +271,10 @@ export async function renderCapturedStoryReel(
   signal?: AbortSignal,
   onProgress?: (progress: number) => void,
   analysisSource: AnalysisSource = "gemini",
+  variation: StoryVariation = {
+    variationId: "original",
+    animationSeed: 0,
+  },
 ): Promise<StoryReelResult> {
   const formData = new FormData();
 
@@ -278,6 +292,8 @@ export async function renderCapturedStoryReel(
           ? "controlled_demo"
           : "gemini",
       style: "nature_documentary",
+      variation_id: variation.variationId,
+      animation_seed: variation.animationSeed,
       profile,
       events,
       scores,
@@ -306,56 +322,88 @@ export async function renderCapturedStoryReel(
   const created =
     (await createResponse.json()) as StoryJobCreateResponse;
 
+  // Remove the legacy write-only reference. Story jobs now follow an explicit
+  // cancellation-on-leave policy rather than claiming browser resumption.
+  window.localStorage.removeItem("pawspective-story-job-id");
+  let cancellationSent = false;
+  const cancelJob = () => {
+    if (cancellationSent) return;
+    cancellationSent = true;
+    void fetch(`${API_BASE_URL}${created.status_url}`, {
+      method: "DELETE",
+      cache: "no-store",
+      keepalive: true,
+    }).catch(() => undefined);
+  };
+  signal?.addEventListener("abort", cancelJob, { once: true });
+
+  if (signal?.aborted) {
+    cancelJob();
+    throw new DOMException("Aborted", "AbortError");
+  }
+
   onProgress?.(1);
+  let reachedTerminalState = false;
 
-  const deadline = Date.now() + 120_000;
+  try {
+    while (true) {
+      await wait(1_500, signal);
 
-  while (Date.now() < deadline) {
-    await wait(1_500, signal);
-
-    const statusResponse = await fetch(
-      `${API_BASE_URL}${created.status_url}`,
-      {
-        method: "GET",
-        cache: "no-store",
-        signal,
-      },
-    );
-
-    if (!statusResponse.ok) {
-      throw await readApiError(
-        statusResponse,
-        "Story Reel status could not be read.",
+      const statusResponse = await fetch(
+        `${API_BASE_URL}${created.status_url}`,
+        {
+          method: "GET",
+          cache: "no-store",
+          signal,
+        },
       );
-    }
 
-    const status =
-      (await statusResponse.json()) as StoryJobStatusResponse;
+      if (!statusResponse.ok) {
+        throw await readApiError(
+          statusResponse,
+          "Story Reel status could not be read.",
+        );
+      }
 
-    const normalizedProgress = Math.min(
-      100,
-      Math.max(0, status.progress),
-    );
+      const status =
+        (await statusResponse.json()) as StoryJobStatusResponse;
 
-    onProgress?.(normalizedProgress);
-
-    if (status.status === "failed") {
-      throw new Error(
-        status.error ??
-          "Story Reel generation failed.",
+      const normalizedProgress = Math.min(
+        100,
+        Math.max(0, status.progress),
       );
-    }
+      onProgress?.(normalizedProgress);
 
-    if (status.status === "expired") {
-      throw new Error(
-        "The Story Reel expired before download.",
-      );
-    }
-
-    if (status.status === "completed") {
-      if (!status.download_url) {
+      if (status.status === "failed" || status.status === "cancelled") {
+        reachedTerminalState = true;
         throw new Error(
-          "The completed Story Reel has no download URL.",
+          status.error ??
+            (status.status === "cancelled"
+              ? "Story Reel rendering was cancelled."
+              : "Story Reel generation failed."),
+        );
+      }
+
+      if (status.status === "expired") {
+        reachedTerminalState = true;
+        throw new Error("The Story Reel expired before download.");
+      }
+
+      if (status.status !== "completed") continue;
+
+      if (!status.download_url) {
+        throw new Error("The completed Story Reel has no download URL.");
+      }
+      if (
+        !status.story_source ||
+        !status.artifact_source ||
+        !status.voice_source ||
+        !status.variation_id ||
+        status.animation_seed === null ||
+        !status.music_track_id
+      ) {
+        throw new Error(
+          "The completed Story Reel is missing verified artifact details.",
         );
       }
 
@@ -376,17 +424,21 @@ export async function renderCapturedStoryReel(
       }
 
       const video = await downloadResponse.blob();
-
       onProgress?.(100);
+      reachedTerminalState = true;
 
       return {
         video,
-        source: status.story_source ?? "template",
+        source: status.story_source,
+        artifactSource: status.artifact_source,
+        voiceSource: status.voice_source,
+        variationId: status.variation_id,
+        animationSeed: status.animation_seed,
+        musicTrackId: status.music_track_id,
       };
     }
+  } finally {
+    signal?.removeEventListener("abort", cancelJob);
+    if (!reachedTerminalState) cancelJob();
   }
-
-  throw new Error(
-    "Story Reel generation exceeded the two-minute limit.",
-  );
 }

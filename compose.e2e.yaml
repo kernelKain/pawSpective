@@ -1,0 +1,8 @@
+# Deterministic production-browser environment when no controlled cache is checked in.
+services:
+  backend:
+    environment:
+      PAWSPECTIVE_CONTROLLED_DEMO_ENABLED: "false"
+      PAWSPECTIVE_DEMO_MODE: "true"
+      PAWSPECTIVE_ALLOW_DEMO_FALLBACK: "true"
+      PAWSPECTIVE_CORS_ORIGINS: http://localhost:3000

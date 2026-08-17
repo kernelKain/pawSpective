@@ -177,6 +177,18 @@ describe("LiveDogLens", () => {
     ).toContain("secondary-button");
   });
 
+  it("resets the vision comparison to its useful default", () => {
+    render(<LensHarness />);
+    const slider = screen.getByRole("slider", {
+      name: "Human and dog vision comparison",
+    }) as HTMLInputElement;
+    fireEvent.change(slider, { target: { value: "20" } });
+    expect(slider.value).toBe("20");
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    expect(slider.value).toBe("72");
+    expect(slider.getAttribute("aria-valuetext")).toContain("72%");
+  });
+
   it("keeps upload recovery visible when camera permission is denied", () => {
     cameraStatus = "denied";
     mockedUseCamera.mockImplementation(() => ({

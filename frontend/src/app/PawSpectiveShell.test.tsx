@@ -231,7 +231,7 @@ function deferred<T>() {
 function reachLens() {
   render(<PawSpectiveShell initialEvents={initialEvents} />);
   fireEvent.change(screen.getByLabelText("Your first name"), {
-    target: { value: "Kshitij" },
+    target: { value: "Alex" },
   });
   fireEvent.change(screen.getByLabelText("Dog's name"), {
     target: { value: "Bruno" },
@@ -267,10 +267,11 @@ async function reachResults(source: "gemini" | "demo" = "gemini") {
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
 
-describe("PawSpectiveShell Phase 8 flow", () => {
+describe("PawSpectiveShell release flow", () => {
   it("labels demo fallback, supports corrections, and blocks scoring", async () => {
     await reachResults("demo");
 
@@ -305,6 +306,11 @@ describe("PawSpectiveShell Phase 8 flow", () => {
     mockedRenderStory.mockResolvedValue({
       video: new Blob(["story-mp4"], { type: "video/mp4" }),
       source: "gemini",
+      artifactSource: "live_render",
+      voiceSource: "elevenlabs",
+      variationId: "original",
+      animationSeed: 0,
+      musicTrackId: "sunny-paws",
     });
     await reachResults();
 
@@ -333,12 +339,27 @@ describe("PawSpectiveShell Phase 8 flow", () => {
     );
     expect(mockedRenderStory.mock.calls[0][3]).toBe("ball");
     expect(mockedRenderStory.mock.calls[0][4]).toMatchObject({
-      owner_name: "Kshitij",
+      owner_name: "Alex",
       dog_name: "Bruno",
       favorite_interest: "Ball",
     });
     expect(mockedRenderStory.mock.calls[0][5]).toBeInstanceOf(
       AbortSignal,
+    );
+    expect(mockedRenderStory.mock.calls[0][8]).toMatchObject({
+      variationId: expect.any(String),
+      animationSeed: expect.any(Number),
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create Story Reel" }),
+    );
+    await waitFor(() => expect(mockedRenderStory).toHaveBeenCalledTimes(2));
+    expect(mockedRenderStory.mock.calls[1][8]!.variationId).not.toBe(
+      mockedRenderStory.mock.calls[0][8]!.variationId,
+    );
+    expect(mockedRenderStory.mock.calls[1][8]!.animationSeed % 3).not.toBe(
+      mockedRenderStory.mock.calls[0][8]!.animationSeed % 3,
     );
 
     fireEvent.change(screen.getByDisplayValue("green ball"), {
@@ -389,7 +410,7 @@ describe("PawSpectiveShell Phase 8 flow", () => {
     });
   });
 
-  it("submits corrections and displays scores in both Phase 4 views", async () => {
+  it("submits corrections and displays scores in both result views", async () => {
     mockedScore.mockResolvedValue(
       visibilityResponse(["One frame used a reduced sample."]),
     );
@@ -562,6 +583,11 @@ describe("PawSpectiveShell Phase 8 flow", () => {
     mockedRenderStory.mockResolvedValue({
       video: new Blob(["story"], { type: "video/mp4" }),
       source: "gemini",
+      artifactSource: "live_render",
+      voiceSource: "elevenlabs",
+      variationId: "original",
+      animationSeed: 0,
+      musicTrackId: "sunny-paws",
     });
     await reachResults();
 
@@ -627,11 +653,67 @@ describe("PawSpectiveShell Phase 8 flow", () => {
         name: "No useful visible objects detected",
       }),
     ).toBeDefined();
-    expect(
-      screen.getByRole("button", { name: "Try another clip" }),
-    ).toBeDefined();
-    expect(
-      screen.getByRole("button", { name: "Use controlled demo" }),
-    ).toBeDefined();
+    expect(screen.getByRole("button", { name: "Try another clip" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Use controlled demo" })).toBeDefined();
+  });
+
+  it("isolates the app while the accuracy drawer is open", async () => {
+    render(<PawSpectiveShell initialEvents={initialEvents} />);
+    const opener = screen.getAllByRole("button", { name: "How accurate is this?" })[0];
+    opener.focus();
+    fireEvent.click(opener);
+
+    const main = document.querySelector("main");
+    expect(main?.hasAttribute("inert")).toBe(true);
+    expect(main?.getAttribute("aria-hidden")).toBe("true");
+    expect(await screen.findByRole("button", { name: "Close" })).toBe(
+      document.activeElement,
+    );
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(main?.hasAttribute("inert")).toBe(false);
+    expect(main?.hasAttribute("aria-hidden")).toBe(false);
+    expect(opener).toBe(document.activeElement);
+  });
+
+  it("discloses profile processing without overstating photo privacy", () => {
+    render(<PawSpectiveShell initialEvents={initialEvents} />);
+
+    expect(screen.getByText(/Your photo stays in this browser/i)).toBeDefined();
+    expect(screen.getByText(/dog details may be shared with Gemini/i)).toBeDefined();
+    expect(screen.getByText(/narration sent to ElevenLabs/i)).toBeDefined();
+    expect(screen.getByText(/first name is sent to neither provider/i)).toBeDefined();
+  });
+
+  it("rejects spoofed and excessive-dimension photos before preview", async () => {
+    const decode = vi.fn().mockResolvedValue({
+      width: 50_000,
+      height: 50_000,
+      close: vi.fn(),
+    });
+    vi.stubGlobal("createImageBitmap", decode);
+    const { container } = render(<PawSpectiveShell initialEvents={initialEvents} />);
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(input).not.toBeNull();
+
+    fireEvent.change(input!, {
+      target: {
+        files: [new File(["not-a-png"], "spoofed.png", { type: "image/png" })],
+      },
+    });
+    expect((await screen.findByRole("alert")).textContent).toMatch(/does not match/i);
+    expect(decode).not.toHaveBeenCalled();
+    expect(screen.queryByAltText("Dog profile preview")).toBeNull();
+
+    const pngHeader = new Uint8Array([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0,
+    ]);
+    fireEvent.change(input!, {
+      target: {
+        files: [new File([pngHeader], "huge.png", { type: "image/png" })],
+      },
+    });
+    expect((await screen.findByRole("alert")).textContent).toMatch(/24 megapixels/i);
+    expect(screen.queryByAltText("Dog profile preview")).toBeNull();
   });
 });

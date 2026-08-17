@@ -250,21 +250,36 @@ export function LiveDogLens({
         )}
       </div>
 
-      <div className="comparison-control">
-        <span>Human view</span>
-
-        <input
-          aria-label="Human and dog vision comparison"
-          type="range"
-          min="0"
-          max="100"
-          value={visionMix}
-          onChange={(event) =>
-            onVisionMixChange(Number(event.target.value))
-          }
-        />
-
-        <span>Dog Vision</span>
+      <div className="comparison-panel">
+        <div className="comparison-heading">
+          <div>
+            <strong>Vision comparison</strong>
+            <small>{visionMix}% canine-color approximation</small>
+          </div>
+          <button
+            className="range-reset"
+            type="button"
+            disabled={visionMix === 72}
+            onClick={() => onVisionMixChange(72)}
+          >
+            Reset
+          </button>
+        </div>
+        <div className="comparison-control">
+          <span>Human Vision</span>
+          <input
+            aria-label="Human and dog vision comparison"
+            aria-valuetext={`${visionMix}% canine-color approximation`}
+            type="range"
+            min="0"
+            max="100"
+            value={visionMix}
+            onChange={(event) =>
+              onVisionMixChange(Number(event.target.value))
+            }
+          />
+          <span>Dog Vision</span>
+        </div>
       </div>
 
       <div className="detail-control">

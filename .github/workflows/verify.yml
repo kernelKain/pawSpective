@@ -45,6 +45,9 @@ jobs:
           cache: pip
           cache-dependency-path: requirements.txt
 
+      - name: Validate documentation links
+        run: python scripts/check_markdown_links.py
+
       - name: Install backend dependencies
         run: python -m pip install -r requirements.txt
 
@@ -59,7 +62,7 @@ jobs:
           ffprobe -version
 
       - name: Test backend
-        run: python -m pytest
+        run: python -m pytest backend/tests
 
       - name: Build backend container image
         run: >-
@@ -83,6 +86,19 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install browser-test dependencies
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
       - name: Create CI environment
         run: |
           cp .env.example .env
@@ -92,10 +108,10 @@ jobs:
           } >> .env
 
       - name: Build production containers
-        run: docker compose build
+        run: docker compose -f compose.yaml -f compose.e2e.yaml build
 
       - name: Start production containers
-        run: docker compose up --detach
+        run: docker compose -f compose.yaml -f compose.e2e.yaml up --detach
 
       - name: Wait for backend readiness
         run: |
@@ -110,16 +126,52 @@ jobs:
             sleep 2
           done
 
-          docker compose logs
+          docker compose -f compose.yaml -f compose.e2e.yaml logs
           exit 1
 
-      - name: Verify frontend
+      - name: Verify frontend root
         run: curl --fail http://localhost:3000
+
+      - name: Verify production browser scaffold
+        working-directory: frontend
+        run: npm run test:e2e
+
+      - name: Prove browser failure artifacts are retained
+        id: artifact-smoke
+        continue-on-error: true
+        working-directory: frontend
+        env:
+          PAWSPECTIVE_E2E_ARTIFACT_SMOKE: "1"
+        run: npm run test:e2e:artifact-smoke
+
+      - name: Verify deliberate failure produced a screenshot
+        env:
+          ARTIFACT_SMOKE_OUTCOME: ${{ steps.artifact-smoke.outcome }}
+        run: |
+          test "$ARTIFACT_SMOKE_OUTCOME" = "failure"
+          find frontend/test-results -name '*.png' -print -quit | grep .
+
+      - name: Capture container logs
+        if: always()
+        run: |
+          mkdir -p artifacts
+          docker compose -f compose.yaml -f compose.e2e.yaml logs --no-color > artifacts/compose.log 2>&1
+
+      - name: Upload browser and container evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-browser-evidence
+          if-no-files-found: warn
+          path: |
+            artifacts/compose.log
+            frontend/playwright-report/
+            frontend/test-results/
 
       - name: Show logs on failure
         if: failure()
-        run: docker compose logs
+        run: docker compose -f compose.yaml -f compose.e2e.yaml logs
 
       - name: Stop containers
         if: always()
-        run: docker compose down --volumes
+        run: docker compose -f compose.yaml -f compose.e2e.yaml down --volumes

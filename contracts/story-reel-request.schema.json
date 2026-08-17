@@ -318,6 +318,21 @@
       "title": "Style",
       "type": "string"
     },
+    "variation_id": {
+      "default": "original",
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "title": "Variation Id",
+      "type": "string"
+    },
+    "animation_seed": {
+      "default": 0,
+      "maximum": 2147483647,
+      "minimum": 0,
+      "title": "Animation Seed",
+      "type": "integer"
+    },
     "profile": {
       "$ref": "#/$defs/StoryProfile"
     },

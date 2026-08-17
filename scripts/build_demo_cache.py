@@ -23,7 +23,7 @@ from backend.app.demo_cache import (
 from backend.app.media import normalize_video, probe_duration_ms
 from backend.app.settings import settings
 from backend.app.story import generate_story
-from backend.app.story_render import render_story_reel
+from backend.app.story_render import music_track_id, render_story_reel
 from backend.app.visibility import score_visibility_events
 from backend.app.voice import synthesize_narration
 
@@ -146,10 +146,20 @@ def build(source: Path, output: Path, force: bool) -> None:
     write_json(
         output / MANIFEST_FILENAME,
         {
-            "cache_version": "1.0",
+            "cache_version": "2.0",
+            "provenance": "pawspective-controlled-demo-v2",
             "created_at": datetime.now(timezone.utc).isoformat(),
             "duration_ms": duration_ms,
             "clip_sha256": fingerprint(clip_path),
+            "analysis_sha256": fingerprint(output / ANALYSIS_FILENAME),
+            "story_request_sha256": fingerprint(output / STORY_REQUEST_FILENAME),
+            "narration_sha256": fingerprint(narration_path),
+            "reel_sha256": fingerprint(reel_path),
+            "story_sha256": fingerprint(output / STORY_FILENAME),
+            "variation_id": story_request.variation_id,
+            "animation_seed": story_request.animation_seed,
+            "music_track_id": music_track_id(story_request.animation_seed),
+            "voice_source": "controlled_demo_cache",
             "analysis_source": analysis_source,
             "story_source": story_source,
             "profile": profile.model_dump(mode="json"),

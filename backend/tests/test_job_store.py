@@ -1,3 +1,5 @@
+import sqlite3
+
 import backend.app.job_store as job_store_module
 from backend.app.job_store import JobStore
 
@@ -37,12 +39,25 @@ def test_job_lifecycle_and_expiration(
     store.update_progress(completed_id, 42)
     assert store.get(completed_id).progress == 42
 
-    store.mark_completed(completed_id, "gemini")
+    store.mark_completed(
+        completed_id,
+        "gemini",
+        artifact_source="live_render",
+        voice_source="elevenlabs",
+        variation_id="variation-a",
+        animation_seed=7,
+        music_track_id="curious-steps",
+    )
     completed = store.get(completed_id)
 
     assert completed.status == "completed"
     assert completed.progress == 100
     assert completed.story_source == "gemini"
+    assert completed.artifact_source == "live_render"
+    assert completed.voice_source == "elevenlabs"
+    assert completed.variation_id == "variation-a"
+    assert completed.animation_seed == 7
+    assert completed.music_track_id == "curious-steps"
     assert completed.error is None
 
     store.create(failed_id, "failed.mp4")
@@ -86,3 +101,61 @@ def test_recovers_interrupted_jobs(tmp_path) -> None:
         assert "backend restart" in record.error
 
     assert store.get(completed_id).status == "completed"
+
+
+def test_cancelled_job_cannot_be_completed_or_failed(tmp_path) -> None:
+    store = JobStore(tmp_path / "jobs.sqlite3")
+    store.initialize()
+    job_id = "f" * 32
+    store.create(job_id, "cancelled.mp4")
+    store.mark_running(job_id)
+
+    assert store.mark_cancelled(job_id)
+    store.mark_completed(job_id, "gemini")
+    store.mark_failed(job_id, "late worker failure")
+
+    record = store.get(job_id)
+    assert record is not None
+    assert record.status == "cancelled"
+    assert record.story_source is None
+    assert record.error is None
+
+
+def test_initialize_migrates_legacy_database_for_provenance(tmp_path) -> None:
+    database = tmp_path / "legacy.sqlite3"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """
+            CREATE TABLE story_jobs (
+                job_id TEXT PRIMARY KEY,
+                status TEXT NOT NULL,
+                progress INTEGER NOT NULL,
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL,
+                error TEXT,
+                story_source TEXT,
+                filename TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO story_jobs VALUES (
+                ?, 'completed', 100, 1, 1, NULL, 'gemini', 'legacy.mp4'
+            )
+            """,
+            ("8" * 32,),
+        )
+
+    store = JobStore(database)
+    store.initialize()
+    store.create("9" * 32, "legacy.mp4")
+    record = store.get("9" * 32)
+
+    assert record is not None
+    assert record.artifact_source is None
+    assert record.voice_source is None
+    assert record.variation_id is None
+    legacy = store.get("8" * 32)
+    assert legacy is not None
+    assert legacy.status == "expired"

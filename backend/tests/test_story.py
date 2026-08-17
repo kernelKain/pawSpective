@@ -3,6 +3,7 @@ from dataclasses import replace
 import pytest
 from pydantic import ValidationError
 
+import backend.app.story as story_module
 from backend.app.contracts import (
     StoryReelRequest,
     StoryScriptResponse,
@@ -118,6 +119,8 @@ def test_fallback_story_is_grounded_and_correct_length() -> None:
     assert 40 <= len(story.narration_text.split()) <= 60
     assert "blue ball" in story.narration_text
     assert "tree" in story.narration_text
+    assert "tail" not in story.narration_text.casefold()
+    assert "staying still" in story.narration_text.casefold()
 
 
 def test_unknown_story_event_is_rejected() -> None:
@@ -314,3 +317,49 @@ def test_gemini_timeout_returns_safe_error_without_fallback(
         match="Story generation failed",
     ):
         story_module.generate_story(story_request())
+
+
+def test_fallback_story_is_first_person_fictional_dog_pov() -> None:
+    story = fallback_story(story_request())
+
+    assert any(word in story.narration_text.lower().split() for word in {"i", "i'm", "my"})
+    assert "fiction" in story.narration_text.lower()
+
+
+def test_animation_seed_changes_grounded_fallback_wording() -> None:
+    first_request = story_request().model_copy(
+        update={"variation_id": "variation-one", "animation_seed": 1}
+    )
+    second_request = story_request().model_copy(
+        update={"variation_id": "variation-two", "animation_seed": 2}
+    )
+
+    first = fallback_story(first_request)
+    second = fallback_story(second_request)
+
+    assert first.narration_text != second.narration_text
+    for story in (first, second):
+        assert "blue ball" in story.narration_text
+        assert "tree" in story.narration_text
+        validate_story_grounding(story, first_request if story is first else second_request)
+
+
+def test_structured_motion_claim_must_match_corrected_event() -> None:
+    request = story_request()
+    story = fallback_story(request)
+    story.lines[0].motion_levels = []
+
+    with pytest.raises(StoryGenerationError, match="motion evidence"):
+        validate_story_grounding(story, request)
+
+
+def test_model_narration_actions_are_replaced_with_server_grounded_text() -> None:
+    request = story_request()
+    generated = fallback_story(request)
+    generated.lines[0].text = "I chase the blue ball into a dragon cave."
+
+    grounded = story_module._apply_server_grounding(generated, request)
+
+    assert "chase" not in grounded.narration_text.casefold()
+    assert "dragon" not in grounded.narration_text.casefold()
+    validate_story_grounding(grounded, request)

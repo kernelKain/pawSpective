@@ -28,3 +28,7 @@ frontend/*.tsbuildinfo
 # Local tooling
 .DS_Store
 Thumbs.db
+.kiro/
+semantic-review/
+frontend/playwright-report/
+frontend/test-results/
